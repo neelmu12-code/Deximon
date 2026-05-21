@@ -84,8 +84,8 @@ def upgrade() -> None:
     )
     op.create_index("ix_binder_slots_page_id", "binder_slots", ["page_id"])
 
-    listing_status = sa.Enum(
-        "available", "on_hold", "sold", "cancelled", name="listing_status"
+    listing_status = postgresql.ENUM(
+        "available", "on_hold", "sold", "cancelled", name="listing_status", create_type=False
     )
     listing_status.create(op.get_bind(), checkfirst=True)
     op.create_table(

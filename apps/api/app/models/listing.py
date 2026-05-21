@@ -34,7 +34,13 @@ class Listing(Base):
 
     asking_price: Mapped[float | None] = mapped_column(Numeric(10, 2), nullable=True)
     status: Mapped[ListingStatus] = mapped_column(
-        Enum(ListingStatus, name="listing_status"), nullable=False, default=ListingStatus.AVAILABLE
+        Enum(
+            ListingStatus,
+            name="listing_status",
+            values_callable=lambda enum_cls: [status.value for status in enum_cls],
+        ),
+        nullable=False,
+        default=ListingStatus.AVAILABLE,
     )
 
     created_at: Mapped[datetime] = mapped_column(
