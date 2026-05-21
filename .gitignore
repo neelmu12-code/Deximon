@@ -1,0 +1,49 @@
+# --- Python ---
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+.env
+.env.*
+!.env.example
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+htmlcov/
+.coverage
+.coverage.*
+coverage.xml
+
+# --- Node / Next.js ---
+node_modules/
+.next/
+out/
+dist/
+build/
+*.tsbuildinfo
+.npm/
+.pnp.*
+.yarn/
+.eslintcache
+
+# --- Tooling ---
+.claude/
+CLAUDE.md
+.DS_Store
+*.log
+*.local
+.vscode/*
+!.vscode/extensions.json
+!.vscode/settings.json
+.idea/
+
+# --- Docker / local data ---
+infra/data/
+*.sqlite
+*.sqlite3
+
+# --- Secrets ---
+*.pem
+*.key
+secrets/

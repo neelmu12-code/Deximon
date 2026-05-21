@@ -1,0 +1,11 @@
+openapi: 3.1.0
+info:
+  title: Deximon — Chat & Notification API
+  version: 0.0.1
+  description: Service 3 (S3). Listing-scoped conversations, messages, WebSocket fanout.
+servers:
+  - url: http://localhost:8000
+    description: Local
+paths: {}
+components:
+  schemas: {}
