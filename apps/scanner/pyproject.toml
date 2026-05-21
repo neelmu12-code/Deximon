@@ -1,0 +1,49 @@
+[tool.poetry]
+name = "deximon-scanner"
+version = "0.1.0"
+description = "Deximon card-recognition microservice. Image preprocess → AWS Rekognition → TCG-API fuzzy match."
+authors = ["Deximon Team"]
+readme = "README.md"
+package-mode = false
+
+[tool.poetry.dependencies]
+python = "^3.12"
+fastapi = "^0.115.0"
+uvicorn = { extras = ["standard"], version = "^0.30.6" }
+pydantic = "^2.9.0"
+pydantic-settings = "^2.5.0"
+pillow = "^10.4.0"
+opencv-python-headless = "^4.10.0.84"
+numpy = "^1.26.4"
+boto3 = "^1.35.30"
+rapidfuzz = "^3.10.0"
+httpx = "^0.27.2"
+
+[tool.poetry.group.dev.dependencies]
+pytest = "^8.3.3"
+ruff = "^0.6.9"
+mypy = "^1.11.2"
+boto3-stubs = { extras = ["rekognition", "s3"], version = "^1.35.30" }
+
+[build-system]
+requires = ["poetry-core"]
+build-backend = "poetry.core.masonry.api"
+
+[tool.ruff]
+line-length = 100
+target-version = "py312"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "B", "UP", "N", "SIM"]
+ignore = ["E501"]
+
+[tool.ruff.lint.isort]
+known-first-party = ["app"]
+
+[tool.mypy]
+python_version = "3.12"
+strict = true
+ignore_missing_imports = true
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]

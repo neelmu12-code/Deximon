@@ -1,0 +1,20 @@
+openapi: 3.1.0
+info:
+  title: Deximon — Card Recognition Scanner API
+  version: 0.0.1
+  description: Service 4 (S4). Standalone microservice. Image preprocess → AWS Rekognition → TCG-API match.
+servers:
+  - url: http://localhost:8001
+    description: Local
+paths:
+  /healthz:
+    get:
+      summary: Liveness probe
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema: { type: object, properties: { status: { type: string } } }
+components:
+  schemas: {}
