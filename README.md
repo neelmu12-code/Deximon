@@ -40,9 +40,3 @@ After the API container is up, run the initial migration once:
 docker compose -f infra/docker-compose.yml exec api alembic upgrade head
 docker compose -f infra/docker-compose.yml exec api python -m app.scripts.seed
 ```
-
-## Working on this repo
-
-- One concern per PR. Branches named after the work (`auth-google-oauth`, `binder-dnd`), not sprints.
-- `main` is always green. Lint + type-check + unit tests run on every PR.
-- VS Code users: open the workspace and accept the recommended extensions prompt (`.vscode/extensions.json`).
