@@ -1,20 +1,189 @@
 openapi: 3.1.0
 info:
-  title: Deximon — Auth & Profile API
-  version: 0.0.1
-  description: Service 1 (S1). Owns identity, accounts, public profiles, reviews.
+  title: Deximon - Auth and Profile API
+  version: 0.1.0
+  description: Authentication and profile endpoints. Browser login sets an httpOnly JWT cookie; API clients may use Bearer authentication.
 servers:
   - url: http://localhost:8000
     description: Local
 paths:
+  /health:
+    get:
+      summary: Health check
+      responses:
+        "200": { description: Healthy }
   /healthz:
     get:
-      summary: Liveness probe
+      summary: Backwards-compatible liveness check
       responses:
-        "200":
-          description: OK
+        "200": { description: Healthy }
+  /auth/register:
+    post:
+      summary: Register with email and password
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/RegisterRequest" }
+      responses:
+        "201":
+          description: Account created and authenticated
+          headers:
+            Set-Cookie: { description: httpOnly access_token cookie, schema: { type: string } }
           content:
             application/json:
-              schema: { type: object, properties: { status: { type: string } } }
+              schema: { $ref: "#/components/schemas/TokenResponse" }
+        "409": { description: Email or username already exists }
+  /auth/login:
+    post:
+      summary: Log in with email and password
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/LoginRequest" }
+      responses:
+        "200":
+          description: Authenticated
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/TokenResponse" }
+        "401": { description: Invalid credentials }
+  /auth/logout:
+    post:
+      summary: Clear browser authentication cookie
+      responses:
+        "204": { description: Logged out }
+  /auth/me:
+    get:
+      summary: Return the authenticated user
+      security: [{ cookieAuth: [] }, { bearerAuth: [] }]
+      responses:
+        "200":
+          description: Current user
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/MeResponse" }
+        "401": { description: Missing or invalid token }
+  /auth/google/login:
+    get:
+      summary: Redirect to Google OAuth authorization
+      responses:
+        "302": { description: Google authorization redirect }
+        "503": { description: Google OAuth is not configured }
+  /auth/google/callback:
+    get:
+      summary: Handle Google OAuth callback and issue auth cookie
+      responses:
+        "302": { description: Redirect to configured frontend success or failure URL }
+  /profiles/{username}:
+    get:
+      summary: Get a public user profile
+      parameters:
+        - in: path
+          name: username
+          required: true
+          schema: { type: string }
+      responses:
+        "200":
+          description: Public profile
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ProfileResponse" }
+        "404": { description: Profile not found }
+  /profiles/me:
+    patch:
+      summary: Update the authenticated user's profile
+      security: [{ cookieAuth: [] }, { bearerAuth: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/ProfileUpdateRequest" }
+      responses:
+        "200":
+          description: Updated profile
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ProfileResponse" }
+        "401": { description: Not authenticated }
+  /profiles/me/privacy:
+    patch:
+      summary: Update the authenticated user's binder privacy setting
+      security: [{ cookieAuth: [] }, { bearerAuth: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/PrivacyUpdateRequest" }
+      responses:
+        "200":
+          description: Updated privacy setting
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ProfileResponse" }
+        "401": { description: Not authenticated }
 components:
-  schemas: {}
+  securitySchemes:
+    cookieAuth:
+      type: apiKey
+      in: cookie
+      name: access_token
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+  schemas:
+    RegisterRequest:
+      type: object
+      required: [email, username, password]
+      properties:
+        email: { type: string, format: email }
+        username: { type: string, minLength: 3, maxLength: 30, pattern: "^[A-Za-z0-9_]+$" }
+        display_name: { type: ["string", "null"], maxLength: 80 }
+        password: { type: string, minLength: 8, maxLength: 128, format: password }
+    LoginRequest:
+      type: object
+      required: [email, password]
+      properties:
+        email: { type: string, format: email }
+        password: { type: string, format: password }
+    ProfileResponse:
+      type: object
+      required: [username, display_name, bio, avatar_url, binder_visibility]
+      properties:
+        username: { type: string }
+        display_name: { type: ["string", "null"] }
+        bio: { type: ["string", "null"] }
+        avatar_url: { type: ["string", "null"] }
+        binder_visibility: { type: string, enum: [public, private] }
+    MeResponse:
+      allOf:
+        - { $ref: "#/components/schemas/ProfileResponse" }
+        - type: object
+          required: [id, email, is_active, created_at, updated_at]
+          properties:
+            id: { type: string, format: uuid }
+            email: { type: string, format: email }
+            is_active: { type: boolean }
+            created_at: { type: string, format: date-time }
+            updated_at: { type: string, format: date-time }
+    TokenResponse:
+      type: object
+      required: [access_token, token_type, expires_in, user]
+      properties:
+        access_token: { type: string }
+        token_type: { type: string, const: bearer }
+        expires_in: { type: integer }
+        user: { $ref: "#/components/schemas/MeResponse" }
+    ProfileUpdateRequest:
+      type: object
+      properties:
+        display_name: { type: ["string", "null"], maxLength: 80 }
+        bio: { type: ["string", "null"], maxLength: 500 }
+        avatar_url: { type: ["string", "null"], format: uri }
+    PrivacyUpdateRequest:
+      type: object
+      required: [binder_visibility]
+      properties:
+        binder_visibility: { type: string, enum: [public, private] }

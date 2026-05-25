@@ -11,7 +11,7 @@ services:
     ports:
       - "${POSTGRES_PORT:-5432}:5432"
     volumes:
-      - ./data/postgres:/var/lib/postgresql/data
+      - postgres_data:/var/lib/postgresql/data
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-deximon}"]
       interval: 5s
@@ -74,3 +74,6 @@ services:
       - ./apps/web:/app
       - /app/node_modules
       - /app/.next
+
+volumes:
+  postgres_data:

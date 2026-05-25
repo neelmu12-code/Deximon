@@ -10,6 +10,13 @@ def test_healthz() -> None:
     assert r.json() == {"status": "ok"}
 
 
+def test_health() -> None:
+    client = TestClient(app)
+    r = client.get("/health")
+    assert r.status_code == 200
+    assert r.json() == {"status": "ok"}
+
+
 def test_root() -> None:
     client = TestClient(app)
     r = client.get("/")

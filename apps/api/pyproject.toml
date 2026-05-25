@@ -12,12 +12,16 @@ fastapi = "^0.115.0"
 uvicorn = { extras = ["standard"], version = "^0.30.6" }
 pydantic = "^2.9.0"
 pydantic-settings = "^2.5.0"
+email-validator = "^2.2.0"
 sqlalchemy = "^2.0.35"
 alembic = "^1.13.3"
 psycopg = { extras = ["binary"], version = "^3.2.3" }
 python-jose = { extras = ["cryptography"], version = "^3.3.0" }
 "passlib" = { extras = ["bcrypt"], version = "^1.7.4" }
+# Passlib 1.7.4 needs bcrypt 4.0.1 for clean, compatible backend initialization.
+bcrypt = "4.0.1"
 authlib = "^1.3.2"
+itsdangerous = "^2.2.0"
 httpx = "^0.27.2"
 redis = "^5.0.8"
 structlog = "^24.4.0"
@@ -54,3 +58,4 @@ plugins = ["pydantic.mypy"]
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 asyncio_mode = "auto"
+asyncio_default_fixture_loop_scope = "function"
