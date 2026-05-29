@@ -20,7 +20,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
   return (
     <>
       <Nav />
-      <main className="mx-auto w-full max-w-6xl px-4 py-8">{children}</main>
+      <main className="mx-auto w-full max-w-[1280px] px-6 py-8">{children}</main>
     </>
   );
 }
