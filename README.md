@@ -1,10 +1,10 @@
 # Deximon
 
-A social, web-based platform for Pokemon TCG collectors. Digital binder, card-recognition scanner, and a listing-scoped trade/sale marketplace.
+A social, web-based platform for Pokémon TCG collectors. Digital binder, card-recognition scanner, and a listing-scoped trade/sale marketplace.
 
 EECS4314 Advanced Software Engineering (Winter 2026).
 
-Team: Ege Yesilyurt, Brian Chang-Kit, Abhiroop Sikand, Neel Upadhyay, Weiqin Situ.
+Team: Ege Yesilyurt, Brian Chang-Kit, Abhiroop Sikand, Neel Upadhyay, Weiqin Situ, Arjon Sadikaj.
 
 ## Monorepo layout
 
