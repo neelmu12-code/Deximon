@@ -17,23 +17,28 @@ export class ApiError extends Error {
   }
 }
 
-type Options = Omit<RequestInit, "body"> & { body?: unknown };
+type Options = Omit<RequestInit, "body"> & { body?: BodyInit | unknown };
 
-const API_BASE = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
+export const API_BASE = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
+
+export function apiUrl(path: string): string {
+  return path.startsWith("http") ? path : `${API_BASE}${path}`;
+}
 
 export async function fetchAPI<T = unknown>(path: string, opts: Options = {}): Promise<T | null> {
   const { body, headers, ...rest } = opts;
+  const isFormData = typeof FormData !== "undefined" && body instanceof FormData;
   const init: RequestInit = {
     ...rest,
     headers: {
-      "Content-Type": "application/json",
+      ...(isFormData ? {} : { "Content-Type": "application/json" }),
       ...(headers as Record<string, string> | undefined),
     },
     credentials: "include",
-    body: body === undefined ? undefined : JSON.stringify(body),
+    body: body === undefined ? undefined : isFormData ? body : JSON.stringify(body),
   };
 
-  const url = path.startsWith("http") ? path : `${API_BASE}${path}`;
+  const url = apiUrl(path);
   const res = await fetch(url, init);
 
   if (res.status === 204) return null;

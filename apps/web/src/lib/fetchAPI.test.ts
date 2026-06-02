@@ -40,4 +40,18 @@ describe("fetchAPI", () => {
     );
     await expect(fetchAPI("/x")).rejects.toBeInstanceOf(ApiError);
   });
+
+  it("sends FormData without forcing a JSON content type", async () => {
+    (globalThis.fetch as unknown as ReturnType<typeof vi.fn>).mockResolvedValueOnce(
+      new Response(JSON.stringify({ ok: true }), { status: 200 }),
+    );
+    const body = new FormData();
+    body.append("file", new Blob(["x"], { type: "image/png" }), "card.png");
+
+    await fetchAPI("/scan/mock", { method: "POST", body });
+
+    const [, init] = (globalThis.fetch as unknown as ReturnType<typeof vi.fn>).mock.calls[0];
+    expect(init).toMatchObject({ method: "POST", credentials: "include", body });
+    expect((init as RequestInit).headers).not.toHaveProperty("Content-Type");
+  });
 });

@@ -1,18 +1,47 @@
 "use client";
 
 import Link from "next/link";
-import { useState } from "react";
+import { useRouter } from "next/navigation";
+import { useEffect, useState } from "react";
 import { Wordmark } from "@/components/Wordmark";
+import { useAuth } from "@/lib/auth";
+import { apiUrl } from "@/lib/fetchAPI";
+
+function messageFromError(error: unknown): string {
+  if (error instanceof Error) return error.message;
+  return "Unable to sign in. Please try again.";
+}
+
+function redirectDestination(): string {
+  const next = new URLSearchParams(window.location.search).get("next");
+  return next?.startsWith("/") ? next : "/binder";
+}
 
 export default function LoginPage() {
+  const router = useRouter();
+  const { initializing, login, user } = useAuth();
   const [showPw, setShowPw] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const [error, setError] = useState<string | null>(null);
 
-  function handleSubmit(e: React.FormEvent) {
+  useEffect(() => {
+    if (!initializing && user) router.replace("/binder");
+  }, [initializing, router, user]);
+
+  async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
+    setError(null);
     setLoading(true);
-    // TODO: wire to POST /auth/login
-    setTimeout(() => setLoading(false), 1200);
+    try {
+      await login({ email, password });
+      router.replace(redirectDestination());
+    } catch (submitError) {
+      setError(messageFromError(submitError));
+    } finally {
+      setLoading(false);
+    }
   }
 
   return (
@@ -26,7 +55,7 @@ export default function LoginPage() {
 
       <div className="bg-surface border border-hair rounded-2xl p-8">
         <h1 className="text-2xl font-bold tracking-tight text-ink mb-1">Sign in</h1>
-        <p className="text-[14px] text-ink2 mb-7">Welcome back — your binder is waiting.</p>
+        <p className="text-[14px] text-ink2 mb-7">Welcome back - your binder is waiting.</p>
 
         <form onSubmit={handleSubmit} className="space-y-4">
           {/* Email */}
@@ -41,6 +70,9 @@ export default function LoginPage() {
               </svg>
               <input
                 type="email"
+                name="email"
+                value={email}
+                onChange={(event) => setEmail(event.target.value)}
                 placeholder="you@example.com"
                 autoComplete="email"
                 required
@@ -64,7 +96,10 @@ export default function LoginPage() {
               </svg>
               <input
                 type={showPw ? "text" : "password"}
-                placeholder="••••••••"
+                name="password"
+                value={password}
+                onChange={(event) => setPassword(event.target.value)}
+                placeholder="Password"
                 autoComplete="current-password"
                 required
                 className="flex-1 bg-transparent outline-none text-sm text-ink placeholder:text-ink3"
@@ -91,13 +126,19 @@ export default function LoginPage() {
             </div>
           </div>
 
+          {error && (
+            <div className="rounded-md border border-dx-red/40 bg-dx-red/10 px-3 py-2 text-[13px] text-dx-red">
+              {error}
+            </div>
+          )}
+
           {/* Submit */}
           <button
             type="submit"
-            disabled={loading}
+            disabled={loading || initializing}
             className="w-full h-11 rounded-md bg-dx-red text-white text-[15px] font-medium border border-dx-red hover:bg-dx-red-hover hover:border-dx-red-hover transition-colors disabled:opacity-60 disabled:cursor-not-allowed mt-2"
           >
-            {loading ? "Signing in…" : "Sign in"}
+            {loading ? "Signing in..." : "Sign in"}
           </button>
         </form>
 
@@ -111,6 +152,7 @@ export default function LoginPage() {
         {/* Google */}
         <button
           type="button"
+          onClick={() => window.location.assign(apiUrl("/auth/google/login"))}
           className="w-full h-11 rounded-md bg-white text-[#202124] text-[14px] font-medium border border-white hover:bg-[#f5f5f5] transition-colors flex items-center justify-center gap-2.5"
         >
           <svg viewBox="0 0 24 24" className="w-4 h-4">
@@ -127,7 +169,7 @@ export default function LoginPage() {
       <p className="mt-5 text-center text-[13px] text-ink3">
         Don&apos;t have an account?{" "}
         <Link href="/signup" className="text-ink hover:text-dx-blue transition-colors font-medium">
-          Sign up →
+          Sign up -&gt;
         </Link>
       </p>
     </div>

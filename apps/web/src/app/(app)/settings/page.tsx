@@ -1,5 +1,7 @@
+import { SettingsForm } from "./SettingsForm";
+
 export const metadata = {
-  title: "Settings — Deximon",
+  title: "Settings - Deximon",
 };
 
 export default function SettingsPage() {
@@ -8,14 +10,11 @@ export default function SettingsPage() {
       <header>
         <h1 className="text-2xl font-semibold">Settings</h1>
         <p className="text-sm text-neutral-600 dark:text-neutral-400">
-          Edit your display name, bio, avatar, and binder visibility (public,
-          unlisted, or private).
+          Edit your display name, bio, avatar, and binder visibility.
         </p>
       </header>
 
-      <div className="rounded border border-dashed border-neutral-300 p-12 text-center text-neutral-500 dark:border-neutral-700">
-        Settings form not implemented yet.
-      </div>
+      <SettingsForm />
     </section>
   );
 }
