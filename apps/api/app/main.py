@@ -1,4 +1,5 @@
 import os
+from collections.abc import AsyncGenerator
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
@@ -13,7 +14,7 @@ settings = get_settings()
 
 
 @asynccontextmanager
-async def lifespan(_app: FastAPI):
+async def lifespan(_app: FastAPI) -> AsyncGenerator[None, None]:
     # Create the upload directory when the server starts, not at import time,
     # so test collection doesn't need filesystem access.
     os.makedirs(settings.upload_dir, exist_ok=True)
