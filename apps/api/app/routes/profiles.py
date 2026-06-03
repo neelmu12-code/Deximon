@@ -113,7 +113,7 @@ async def upload_avatar(
             detail="Avatar must be under 5 MB.",
         )
 
-    ext = _AVATAR_EXT[file.content_type]  # type: ignore[index]
+    ext = _AVATAR_EXT[file.content_type]
     avatar_dir = Path(settings.upload_dir) / "avatars"
     avatar_dir.mkdir(parents=True, exist_ok=True)
 
