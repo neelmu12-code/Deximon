@@ -51,7 +51,8 @@ class Settings(BaseSettings):
     auth_cookie_secure: bool = Field(default=False, alias="AUTH_COOKIE_SECURE")
     session_secret_key: str | None = Field(default=None, alias="SESSION_SECRET_KEY")
     # Local disk storage for dev. Set UPLOAD_DIR to a persistent volume path in prod.
-    upload_dir: str = Field(default="/app/uploads", alias="UPLOAD_DIR")
+    # Defaults to /tmp so it's writable without Docker (CI, local without containers).
+    upload_dir: str = Field(default="/tmp/deximon_uploads", alias="UPLOAD_DIR")
 
     @field_validator("jwt_algorithm")
     @classmethod

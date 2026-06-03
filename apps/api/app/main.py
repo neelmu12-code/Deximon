@@ -1,4 +1,5 @@
 import os
+from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
@@ -10,7 +11,16 @@ from app.routes import auth, health, profiles
 
 settings = get_settings()
 
-app = FastAPI(title="Deximon API", version="0.1.0")
+
+@asynccontextmanager
+async def lifespan(_app: FastAPI):
+    # Create the upload directory when the server starts, not at import time,
+    # so test collection doesn't need filesystem access.
+    os.makedirs(settings.upload_dir, exist_ok=True)
+    yield
+
+
+app = FastAPI(title="Deximon API", version="0.1.0", lifespan=lifespan)
 
 app.add_middleware(
     CORSMiddleware,
@@ -26,10 +36,9 @@ app.add_middleware(
     https_only=settings.auth_cookie_secure,
 )
 
-# Serve uploaded files (avatars, etc.) at /static.
-# In dev the api container mounts ./apps/api:/app so files persist on the host.
-os.makedirs(settings.upload_dir, exist_ok=True)
-app.mount("/static", StaticFiles(directory=settings.upload_dir), name="static")
+# check_dir=False so mounting doesn't fail if the directory doesn't exist yet
+# at import time (lifespan creates it before any request is served).
+app.mount("/static", StaticFiles(directory=settings.upload_dir, check_dir=False), name="static")
 
 app.include_router(health.router)
 app.include_router(auth.router)
