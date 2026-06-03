@@ -42,6 +42,7 @@ CLAUDE.md
 infra/data/
 *.sqlite
 *.sqlite3
+apps/api/uploads/
 
 # --- Secrets ---
 *.pem

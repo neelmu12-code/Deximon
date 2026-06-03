@@ -17,7 +17,7 @@ from app.core.security import create_access_token, hash_password, verify_passwor
 from app.db.session import get_db
 from app.dependencies.auth import get_current_user
 from app.models.user import Profile, User
-from app.schemas.auth import LoginRequest, RegisterRequest, TokenResponse
+from app.schemas.auth import ChangePasswordRequest, LoginRequest, RegisterRequest, TokenResponse
 from app.schemas.user import MeResponse
 
 router = APIRouter(prefix="/auth", tags=["auth"])
@@ -35,6 +35,9 @@ def _me_response(user: User) -> MeResponse:
         bio=user.profile.bio,
         avatar_url=user.profile.avatar_url,
         binder_visibility="public" if user.profile.binder_public else "private",
+        location=user.profile.location,
+        twitter_handle=user.profile.twitter_handle,
+        instagram_handle=user.profile.instagram_handle,
         is_active=user.is_active,
         created_at=user.created_at,
         updated_at=user.updated_at,
@@ -133,6 +136,27 @@ def logout(response: Response, settings: SettingsDep) -> None:
 @router.get("/me", response_model=MeResponse)
 def me(current_user: CurrentUser) -> MeResponse:
     return _me_response(current_user)
+
+
+@router.post("/change-password", status_code=status.HTTP_204_NO_CONTENT)
+def change_password(
+    payload: ChangePasswordRequest,
+    current_user: CurrentUser,
+    db: DbSession,
+) -> None:
+    if current_user.password_hash is None:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Your account uses Google sign-in and has no password set.",
+        )
+    if not verify_password(payload.current_password, current_user.password_hash):
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Current password is incorrect.",
+        )
+    current_user.password_hash = hash_password(payload.new_password)
+    current_user.updated_at = datetime.now(UTC)
+    db.commit()
 
 
 @lru_cache

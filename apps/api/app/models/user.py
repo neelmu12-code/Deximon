@@ -41,5 +41,8 @@ class Profile(Base):
     bio: Mapped[str | None] = mapped_column(String(500), nullable=True)
     avatar_url: Mapped[str | None] = mapped_column(String(500), nullable=True)
     binder_public: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
+    location: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    twitter_handle: Mapped[str | None] = mapped_column(String(50), nullable=True)
+    instagram_handle: Mapped[str | None] = mapped_column(String(50), nullable=True)
 
     user: Mapped[User] = relationship(back_populates="profile")

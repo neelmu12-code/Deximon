@@ -1,5 +1,8 @@
+import os
+
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.staticfiles import StaticFiles
 from starlette.middleware.sessions import SessionMiddleware
 
 from app.core.config import get_settings
@@ -22,6 +25,11 @@ app.add_middleware(
     same_site="lax",
     https_only=settings.auth_cookie_secure,
 )
+
+# Serve uploaded files (avatars, etc.) at /static.
+# In dev the api container mounts ./apps/api:/app so files persist on the host.
+os.makedirs(settings.upload_dir, exist_ok=True)
+app.mount("/static", StaticFiles(directory=settings.upload_dir), name="static")
 
 app.include_router(health.router)
 app.include_router(auth.router)

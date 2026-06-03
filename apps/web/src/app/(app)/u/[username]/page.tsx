@@ -1,4 +1,5 @@
 import { Fragment } from "react";
+import Image from "next/image";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { BinderPreview } from "@/components/profile/BinderPreview";
@@ -48,7 +49,14 @@ export default async function PublicProfilePage({ params }: { params: Promise<Pa
     <div className="max-w-[1440px] mx-auto px-6 py-8 space-y-8">
       {/* profile header */}
       <div className="flex items-start gap-6 flex-wrap">
-        <Avatar name={name} hue={avatarHue(profile.username)} size={96} ring />
+        {/* Avatar — image if set, otherwise initials */}
+        <div className="relative w-24 h-24 rounded-full overflow-hidden border-2 border-hair shrink-0">
+          {profile.avatar_url ? (
+            <Image src={profile.avatar_url} alt={name} fill className="object-cover" sizes="96px" />
+          ) : (
+            <Avatar name={name} hue={avatarHue(profile.username)} size={96} ring />
+          )}
+        </div>
 
         <div className="flex-1 min-w-[260px]">
           <div className="flex items-baseline gap-3 flex-wrap">
@@ -56,6 +64,48 @@ export default async function PublicProfilePage({ params }: { params: Promise<Pa
             <span className="text-ink2">@{profile.username}</span>
           </div>
           <p className="text-ink2 text-sm mt-1 max-w-xl">{profile.bio ?? "No bio yet."}</p>
+
+          {/* location + social links */}
+          <div className="flex items-center gap-4 mt-2 flex-wrap text-[13px] text-ink3">
+            {profile.location && (
+              <span className="flex items-center gap-1">
+                <svg viewBox="0 0 24 24" className="w-3.5 h-3.5 shrink-0" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7z" />
+                  <circle cx="12" cy="9" r="2.5" />
+                </svg>
+                {profile.location}
+              </span>
+            )}
+            {profile.twitter_handle && (
+              <a
+                href={`https://x.com/${profile.twitter_handle}`}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="flex items-center gap-1 hover:text-ink transition-colors"
+              >
+                <svg viewBox="0 0 24 24" className="w-3.5 h-3.5 shrink-0" fill="currentColor">
+                  <path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-5.214-6.817L4.99 21.75H1.68l7.73-8.835L1.254 2.25H8.08l4.713 6.231zm-1.161 17.52h1.833L7.084 4.126H5.117z" />
+                </svg>
+                @{profile.twitter_handle}
+              </a>
+            )}
+            {profile.instagram_handle && (
+              <a
+                href={`https://instagram.com/${profile.instagram_handle}`}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="flex items-center gap-1 hover:text-ink transition-colors"
+              >
+                <svg viewBox="0 0 24 24" className="w-3.5 h-3.5 shrink-0" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round">
+                  <rect x="2" y="2" width="20" height="20" rx="5" ry="5" />
+                  <path d="M16 11.37A4 4 0 1 1 12.63 8 4 4 0 0 1 16 11.37z" />
+                  <line x1="17.5" y1="6.5" x2="17.51" y2="6.5" />
+                </svg>
+                @{profile.instagram_handle}
+              </a>
+            )}
+          </div>
+
           <div className="flex items-center gap-4 mt-3 flex-wrap">
             <span
               className={`inline-flex items-center gap-1.5 rounded-full border px-2 py-[3px] text-[11px] font-medium tracking-wide ${
