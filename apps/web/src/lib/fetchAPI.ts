@@ -19,7 +19,13 @@ export class ApiError extends Error {
 
 type Options = Omit<RequestInit, "body"> & { body?: BodyInit | unknown };
 
-export const API_BASE = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
+// On the server (RSC/SSR), use the Docker-internal URL so the request goes
+// container-to-container. On the client, NEXT_PUBLIC_API_URL is used because
+// the browser is on the host machine where localhost:8000 is reachable.
+export const API_BASE =
+  typeof window === "undefined"
+    ? (process.env.API_URL ?? process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000")
+    : (process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000");
 
 export function apiUrl(path: string): string {
   return path.startsWith("http") ? path : `${API_BASE}${path}`;

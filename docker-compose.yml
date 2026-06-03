@@ -66,6 +66,9 @@ services:
     environment:
       NEXT_PUBLIC_API_URL: http://localhost:8000
       NEXT_PUBLIC_SCANNER_URL: http://localhost:8001
+      # Server-side (SSR/RSC) URL — uses Docker service name, not localhost
+      API_URL: http://api:8000
+      SCANNER_URL: http://scanner:8001
     depends_on:
       - api
     ports:
