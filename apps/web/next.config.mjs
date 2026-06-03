@@ -8,6 +8,12 @@ const nextConfig = {
         hostname: "images.pokemontcg.io",
         pathname: "/**",
       },
+      {
+        protocol: "http",
+        hostname: "localhost",
+        port: "8000",
+        pathname: "/static/**",
+      },
     ],
   },
 };
