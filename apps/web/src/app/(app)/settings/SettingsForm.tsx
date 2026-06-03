@@ -2,6 +2,7 @@
 
 import Image from "next/image";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 import { Avatar } from "@/components/ui/Avatar";
 import { type BinderVisibility, type ProfileUpdateInput, useAuth } from "@/lib/auth";
@@ -54,6 +55,7 @@ const inputCls =
 
 export function SettingsForm() {
   const { changePassword, initializing, updatePrivacy, updateProfile, user } = useAuth();
+  const router = useRouter();
 
   // — profile state —
   const [displayName, setDisplayName] = useState("");
@@ -185,7 +187,7 @@ export function SettingsForm() {
       }
 
       setAvatarFile(null);
-      setProfileSuccess("Profile saved.");
+      router.push(`/u/${username.trim().toLowerCase()}`);
     } catch (err) {
       setProfileError(messageFromError(err));
     } finally {
@@ -244,7 +246,7 @@ export function SettingsForm() {
                   alt={name}
                   fill
                   className="object-cover"
-                  unoptimized={!!avatarPreview}
+                  unoptimized
                 />
               ) : (
                 <Avatar name={name} hue={avatarHue(user.username)} size={80} />

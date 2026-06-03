@@ -1,5 +1,6 @@
 import Image from "next/image";
 import Link from "next/link";
+import { LandingUserWidget } from "@/components/LandingUserWidget";
 import HeroShelf, { type HeroCard } from "@/components/landing/HeroShelf";
 import { Wordmark } from "@/components/Wordmark";
 
@@ -91,20 +92,7 @@ function LandingNav() {
             How it works
           </a>
         </nav>
-        <div className="flex items-center gap-2">
-          <Link
-            href="/login"
-            className="px-3 h-9 inline-flex items-center text-[13px] font-medium text-dx-blue hover:underline"
-          >
-            Sign in
-          </Link>
-          <Link
-            href="/signup"
-            className="h-8 px-3 inline-flex items-center rounded-md bg-dx-red text-white text-[12px] font-medium border border-dx-red hover:bg-dx-red-hover hover:border-dx-red-hover transition-colors"
-          >
-            Create an account
-          </Link>
-        </div>
+        <LandingUserWidget />
       </div>
     </div>
   );
