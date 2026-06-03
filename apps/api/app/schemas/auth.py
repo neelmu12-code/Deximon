@@ -49,3 +49,15 @@ class TokenResponse(BaseModel):
     token_type: str = "bearer"
     expires_in: int
     user: MeResponse
+
+
+class ChangePasswordRequest(BaseModel):
+    current_password: str = Field(min_length=1, max_length=128)
+    new_password: str = Field(min_length=8, max_length=128)
+
+    @field_validator("new_password")
+    @classmethod
+    def validate_bcrypt_password_size(cls, value: str) -> str:
+        if len(value.encode("utf-8")) > 72:
+            raise ValueError("password must be no more than 72 bytes")
+        return value

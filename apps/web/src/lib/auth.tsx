@@ -21,6 +21,9 @@ export type AuthUser = {
   bio: string | null;
   avatar_url: string | null;
   binder_visibility: BinderVisibility;
+  location: string | null;
+  twitter_handle: string | null;
+  instagram_handle: string | null;
   is_active: boolean;
   created_at: string;
   updated_at: string;
@@ -32,6 +35,9 @@ export type PublicProfile = {
   bio: string | null;
   avatar_url: string | null;
   binder_visibility: BinderVisibility;
+  location: string | null;
+  twitter_handle: string | null;
+  instagram_handle: string | null;
 };
 
 type TokenResponse = {
@@ -51,10 +57,14 @@ type RegisterInput = LoginInput & {
   display_name?: string;
 };
 
-type ProfileUpdateInput = {
+export type ProfileUpdateInput = {
   display_name?: string | null;
   bio?: string | null;
   avatar_url?: string | null;
+  username?: string;
+  location?: string | null;
+  twitter_handle?: string | null;
+  instagram_handle?: string | null;
 };
 
 type AuthContextValue = {
@@ -67,6 +77,7 @@ type AuthContextValue = {
   logout: () => Promise<void>;
   updateProfile: (input: ProfileUpdateInput) => Promise<PublicProfile>;
   updatePrivacy: (binderVisibility: BinderVisibility) => Promise<PublicProfile>;
+  changePassword: (currentPassword: string, newPassword: string) => Promise<void>;
   clearError: () => void;
 };
 
@@ -164,6 +175,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     return updated;
   }, []);
 
+  const changePassword = useCallback(async (currentPassword: string, newPassword: string) => {
+    setError(null);
+    await fetchAPI("/auth/change-password", {
+      method: "POST",
+      body: { current_password: currentPassword, new_password: newPassword },
+    });
+  }, []);
+
   const value = useMemo(
     () => ({
       user,
@@ -175,9 +194,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       logout,
       updateProfile,
       updatePrivacy,
+      changePassword,
       clearError: () => setError(null),
     }),
-    [error, initializing, login, logout, refreshUser, register, updatePrivacy, updateProfile, user],
+    [changePassword, error, initializing, login, logout, refreshUser, register, updatePrivacy, updateProfile, user],
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

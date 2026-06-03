@@ -3,31 +3,18 @@ import Image from "next/image";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { BinderPreview } from "@/components/profile/BinderPreview";
+import { EditProfileButton } from "@/components/profile/EditProfileButton";
 import { Avatar } from "@/components/ui/Avatar";
 import { ApiError, fetchAPI } from "@/lib/fetchAPI";
 import { avatarHue, userDisplayName } from "@/lib/userDisplay";
 import type { PublicProfile } from "@/lib/auth";
 
+// Binder teammate: fetch binder pages here and pass them to <BinderPreview pages={...} />.
+// Shape: CardSlot[][] — each inner array is one 9-slot page. Import CardSlot from
+// @/components/profile/BinderPreview. Example call:
+//   const binderPages = await fetchAPI<CardSlot[][]>(`/binder/${username}/pages`);
+
 type Params = { username: string };
-
-const DEMO_LISTINGS = [
-  { id: "L-2055", name: "Charizard", price: 124.00, status: "Available" as const, image: "https://images.pokemontcg.io/base1/4.png"  },
-  { id: "L-2056", name: "Mewtwo",    price: 96.50,  status: "Available" as const, image: "https://images.pokemontcg.io/base1/10.png" },
-  { id: "L-2057", name: "Blastoise", price: 88.00,  status: "Available" as const, image: "https://images.pokemontcg.io/base1/2.png"  },
-  { id: "L-2058", name: "Gyarados",  price: 43.00,  status: "On Hold"   as const, image: "https://images.pokemontcg.io/base1/6.png"  },
-];
-
-const SET_PROGRESS = [
-  { code: "BS",  name: "Base Set", have: 42, total: 102 },
-  { code: "JGL", name: "Jungle",   have: 24, total: 64  },
-  { code: "FSL", name: "Fossil",   have: 18, total: 62  },
-];
-
-const STATUS_COLORS = {
-  "Available": "text-dx-green",
-  "On Hold":   "text-dx-gold",
-  "Sold":      "text-ink3",
-} as const;
 
 async function loadProfile(username: string): Promise<PublicProfile> {
   try {
@@ -50,18 +37,26 @@ export default async function PublicProfilePage({ params }: { params: Promise<Pa
   const profile = await loadProfile(username);
   const name = userDisplayName(profile);
   const binderIsPublic = profile.binder_visibility === "public";
+
   const stats = [
-    { label: "Binder", value: binderIsPublic ? "Public" : "Private" },
-    { label: "Cards owned", value: "Demo" },
-    { label: "Cards listed", value: "Demo" },
-    { label: "Completed trades", value: "Pending" },
+    { label: "Binder",           value: binderIsPublic ? "Public" : "Private" },
+    { label: "Cards owned",      value: "—" },
+    { label: "Cards listed",     value: "—" },
+    { label: "Completed trades", value: "—" },
   ];
 
   return (
     <div className="max-w-[1440px] mx-auto px-6 py-8 space-y-8">
       {/* profile header */}
       <div className="flex items-start gap-6 flex-wrap">
-        <Avatar name={name} hue={avatarHue(profile.username)} size={96} ring />
+        {/* Avatar — image if set, otherwise initials */}
+        <div className="relative w-24 h-24 rounded-full overflow-hidden border-2 border-hair shrink-0">
+          {profile.avatar_url ? (
+            <Image src={profile.avatar_url} alt={name} fill className="object-cover" sizes="96px" />
+          ) : (
+            <Avatar name={name} hue={avatarHue(profile.username)} size={96} ring />
+          )}
+        </div>
 
         <div className="flex-1 min-w-[260px]">
           <div className="flex items-baseline gap-3 flex-wrap">
@@ -69,11 +64,49 @@ export default async function PublicProfilePage({ params }: { params: Promise<Pa
             <span className="text-ink2">@{profile.username}</span>
           </div>
           <p className="text-ink2 text-sm mt-1 max-w-xl">{profile.bio ?? "No bio yet."}</p>
+
+          {/* location + social links */}
+          <div className="flex items-center gap-4 mt-2 flex-wrap text-[13px] text-ink3">
+            {profile.location && (
+              <span className="flex items-center gap-1">
+                <svg viewBox="0 0 24 24" className="w-3.5 h-3.5 shrink-0" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7z" />
+                  <circle cx="12" cy="9" r="2.5" />
+                </svg>
+                {profile.location}
+              </span>
+            )}
+            {profile.twitter_handle && (
+              <a
+                href={`https://x.com/${profile.twitter_handle}`}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="flex items-center gap-1 hover:text-ink transition-colors"
+              >
+                <svg viewBox="0 0 24 24" className="w-3.5 h-3.5 shrink-0" fill="currentColor">
+                  <path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-5.214-6.817L4.99 21.75H1.68l7.73-8.835L1.254 2.25H8.08l4.713 6.231zm-1.161 17.52h1.833L7.084 4.126H5.117z" />
+                </svg>
+                @{profile.twitter_handle}
+              </a>
+            )}
+            {profile.instagram_handle && (
+              <a
+                href={`https://instagram.com/${profile.instagram_handle}`}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="flex items-center gap-1 hover:text-ink transition-colors"
+              >
+                <svg viewBox="0 0 24 24" className="w-3.5 h-3.5 shrink-0" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round">
+                  <rect x="2" y="2" width="20" height="20" rx="5" ry="5" />
+                  <path d="M16 11.37A4 4 0 1 1 12.63 8 4 4 0 0 1 16 11.37z" />
+                  <line x1="17.5" y1="6.5" x2="17.51" y2="6.5" />
+                </svg>
+                @{profile.instagram_handle}
+              </a>
+            )}
+          </div>
+
           <div className="flex items-center gap-4 mt-3 flex-wrap">
-            <span className="inline-flex items-center gap-1.5 rounded-full border px-2 py-[3px] text-[11px] font-medium tracking-wide bg-[#0f2a1d] text-[#8bdcae] border-[#1c4a33]">
-              <span className="w-1.5 h-1.5 rounded-full bg-dx-green inline-block" />
-              Profile loaded
-            </span>
             <span
               className={`inline-flex items-center gap-1.5 rounded-full border px-2 py-[3px] text-[11px] font-medium tracking-wide ${
                 binderIsPublic
@@ -90,23 +123,20 @@ export default async function PublicProfilePage({ params }: { params: Promise<Pa
           <button className="inline-flex items-center justify-center h-10 px-4 text-sm font-medium rounded-md bg-transparent text-ink border border-hair hover:bg-surface2 transition-colors">
             Share profile
           </button>
-          <Link
-            href="/settings"
-            className="inline-flex items-center justify-center h-10 px-4 text-sm font-medium rounded-md bg-dx-red text-white hover:bg-[#B71C2C] transition-colors"
-          >
-            Edit profile
-          </Link>
+          {/* Only renders when the logged-in user matches this profile */}
+          <EditProfileButton username={username} />
         </div>
       </div>
 
       {/* main grid */}
       <div className="grid grid-cols-12 gap-6">
-        {/* binder - left 9 cols */}
+        {/* binder — left 9 cols */}
+        {/* Binder teammate: pass pages={binderPages} once the API endpoint exists */}
         <div className="col-span-12 xl:col-span-9">
-          <BinderPreview />
+          <BinderPreview pages={[]} binderIsPublic={binderIsPublic} />
         </div>
 
-        {/* right rail - 3 cols */}
+        {/* right rail — 3 cols */}
         <div className="col-span-12 xl:col-span-3 space-y-6">
           {/* Quick stats */}
           <div className="bg-surface border border-hair rounded-xl p-5">
@@ -129,52 +159,13 @@ export default async function PublicProfilePage({ params }: { params: Promise<Pa
                 View all
               </Link>
             </div>
-            <div className="grid grid-cols-2 gap-3">
-              {DEMO_LISTINGS.map((l) => (
-                <Link key={l.id} href={`/market/${l.id}`} className="group">
-                  <div className="relative aspect-[5/7] rounded-lg overflow-hidden mb-1.5 shadow-md transition-transform duration-200 group-hover:-translate-y-1">
-                    <Image
-                      src={l.image}
-                      alt={l.name}
-                      fill
-                      className="object-cover"
-                      sizes="12vw"
-                    />
-                  </div>
-                  <div className="text-[11px] font-semibold truncate text-ink2 group-hover:text-ink transition-colors">
-                    {l.name}
-                  </div>
-                  <div className={`text-[10px] font-bold tabular-nums ${STATUS_COLORS[l.status]}`}>
-                    ${l.price.toFixed(2)}
-                  </div>
-                </Link>
-              ))}
-            </div>
+            <p className="text-sm text-ink3 text-center py-4">No active listings.</p>
           </div>
 
           {/* Set progress */}
           <div className="bg-surface border border-hair rounded-xl p-5">
             <div className="text-[11px] uppercase tracking-[0.22em] text-ink3 mb-3">Set progress</div>
-            <div className="space-y-3">
-              {SET_PROGRESS.map((s) => (
-                <div key={s.code}>
-                  <div className="flex items-center justify-between text-[12px] mb-1.5">
-                    <span>
-                      <span className="font-mono text-ink3">{s.code}</span>
-                      {" "}
-                      <span className="text-ink">{s.name}</span>
-                    </span>
-                    <span className="tabular-nums text-ink2">{s.have}/{s.total}</span>
-                  </div>
-                  <div className="h-1.5 rounded-full bg-hair overflow-hidden">
-                    <div
-                      className="h-full bg-dx-red rounded-full"
-                      style={{ width: `${(s.have / s.total) * 100}%` }}
-                    />
-                  </div>
-                </div>
-              ))}
-            </div>
+            <p className="text-sm text-ink3 text-center py-4">No sets tracked yet.</p>
           </div>
         </div>
       </div>

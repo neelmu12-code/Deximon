@@ -6,11 +6,11 @@ export const metadata = {
 
 export default function SettingsPage() {
   return (
-    <section className="space-y-4">
+    <section className="max-w-2xl space-y-4">
       <header>
-        <h1 className="text-2xl font-semibold">Settings</h1>
-        <p className="text-sm text-neutral-600 dark:text-neutral-400">
-          Edit your display name, bio, avatar, and binder visibility.
+        <h1 className="text-2xl font-semibold text-ink">Settings</h1>
+        <p className="text-sm text-ink2 mt-1">
+          Manage your profile, social links, privacy, and account security.
         </p>
       </header>
 
