@@ -1,5 +1,6 @@
 "use client";
 
+import Image from "next/image";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
@@ -61,7 +62,13 @@ export function UserMenu() {
   return (
     <div ref={ref} className="relative ml-1">
       <button onClick={() => setOpen((v) => !v)} aria-label="User menu" className="flex items-center">
-        <Avatar name={name} hue={avatarHue(user.username)} size={32} ring />
+        {user.avatar_url ? (
+          <div className="relative w-8 h-8 rounded-full overflow-hidden ring-2 ring-base outline outline-1 outline-hair shrink-0">
+            <Image src={user.avatar_url} alt={name} fill className="object-cover" unoptimized />
+          </div>
+        ) : (
+          <Avatar name={name} hue={avatarHue(user.username)} size={32} ring />
+        )}
       </button>
 
       {open && (

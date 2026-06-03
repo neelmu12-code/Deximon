@@ -8,17 +8,6 @@ import { Wordmark } from "./Wordmark";
 
 const NAV_LINKS = [
   {
-    href: "/",
-    label: "Home",
-    icon: (
-      <svg viewBox="0 0 24 24" className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinejoin="round">
-        <path d="M4 11l8-7 8 7" />
-        <path d="M6 10v9h12v-9" />
-      </svg>
-    ),
-    match: (p: string) => p === "/",
-  },
-  {
     href: "/binder",
     label: "Binder",
     icon: (
@@ -60,14 +49,14 @@ export function Nav() {
 
   return (
     <header className="sticky top-0 z-40 backdrop-blur-md bg-base/75 border-b border-hair">
-      <nav className="max-w-[1440px] mx-auto px-6 h-14 flex items-center">
+      <nav className="max-w-[1440px] mx-auto px-8 h-14 flex items-center">
         {/* Wordmark */}
-        <Link href="/" className="mr-6">
+        <Link href="/" className="shrink-0">
           <Wordmark />
         </Link>
 
-        {/* Centre links */}
-        <div className="flex items-center gap-1">
+        {/* Centre links — truly centered between logo and right rail */}
+        <div className="flex-1 flex justify-center items-center gap-1">
           {NAV_LINKS.map((l) => {
             const active = l.match(pathname);
             return (
@@ -88,7 +77,7 @@ export function Nav() {
         </div>
 
         {/* Right: search, bell, avatar */}
-        <div className="ml-auto flex items-center gap-1">
+        <div className="shrink-0 flex items-center gap-1">
           <button
             aria-label="Search"
             className="w-9 h-9 rounded-md inline-flex items-center justify-center text-ink2 hover:text-ink hover:bg-surface2 transition-colors"
