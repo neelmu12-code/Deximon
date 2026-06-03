@@ -52,7 +52,7 @@ export default async function PublicProfilePage({ params }: { params: Promise<Pa
         {/* Avatar — image if set, otherwise initials */}
         <div className="relative w-24 h-24 rounded-full overflow-hidden border-2 border-hair shrink-0">
           {profile.avatar_url ? (
-            <Image src={profile.avatar_url} alt={name} fill className="object-cover" sizes="96px" />
+            <Image src={profile.avatar_url} alt={name} fill className="object-cover" sizes="96px" unoptimized />
           ) : (
             <Avatar name={name} hue={avatarHue(profile.username)} size={96} ring />
           )}
