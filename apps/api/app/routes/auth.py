@@ -1,5 +1,5 @@
 import re
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from functools import lru_cache
 from typing import Annotated, Any, cast
 from uuid import uuid4
@@ -8,23 +8,42 @@ from authlib.integrations.base_client.errors import OAuthError
 from authlib.integrations.starlette_client import OAuth
 from fastapi import APIRouter, Depends, HTTPException, Response, status
 from fastapi.responses import RedirectResponse
-from sqlalchemy import func, select
+from sqlalchemy import func, select, update
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 from starlette.requests import Request
 
 from app.core.config import Settings, get_settings
-from app.core.security import create_access_token, hash_password, verify_password
+from app.core.security import (
+    create_access_token,
+    generate_reset_token,
+    hash_password,
+    hash_reset_token,
+    verify_password,
+)
 from app.db.session import get_db
 from app.dependencies.auth import get_current_user
-from app.models.user import Profile, User
-from app.schemas.auth import ChangePasswordRequest, LoginRequest, RegisterRequest, TokenResponse
+from app.models.user import PasswordResetToken, Profile, User
+from app.schemas.auth import (
+    ChangePasswordRequest,
+    ForgotPasswordRequest,
+    LoginRequest,
+    MessageResponse,
+    RegisterRequest,
+    ResetPasswordRequest,
+    TokenResponse,
+)
 from app.schemas.user import MeResponse
+from app.services.email import send_password_reset_email
 
 router = APIRouter(prefix="/auth", tags=["auth"])
+api_router = APIRouter(prefix="/api/auth", tags=["auth"])
 DbSession = Annotated[Session, Depends(get_db)]
 SettingsDep = Annotated[Settings, Depends(get_settings)]
 CurrentUser = Annotated[User, Depends(get_current_user)]
+
+FORGOT_PASSWORD_MESSAGE = "If an account with that email exists, password reset instructions have been sent."
+RESET_PASSWORD_MESSAGE = "Password has been reset successfully."
 
 
 def _me_response(user: User) -> MeResponse:
@@ -67,6 +86,42 @@ def _token_response(user: User, token: str, settings: Settings) -> TokenResponse
 
 def _user_by_email(db: Session, email: str) -> User | None:
     return db.scalar(select(User).where(func.lower(User.email) == email.lower()))
+
+
+def _request_ip(request: Request) -> str | None:
+    return request.client.host[:45] if request.client and request.client.host else None
+
+
+def _request_user_agent(request: Request) -> str | None:
+    user_agent = request.headers.get("user-agent")
+    return user_agent[:500] if user_agent else None
+
+
+def _password_reset_expired(expires_at: datetime, now: datetime) -> bool:
+    normalized_expires_at = expires_at
+    if normalized_expires_at.tzinfo is None:
+        normalized_expires_at = normalized_expires_at.replace(tzinfo=UTC)
+    return normalized_expires_at <= now
+
+
+def _revoke_active_password_reset_tokens(
+    db: Session,
+    user: User,
+    revoked_at: datetime,
+    exclude_token: PasswordResetToken | None = None,
+) -> None:
+    conditions = [
+        PasswordResetToken.user_id == user.id,
+        PasswordResetToken.used_at.is_(None),
+        PasswordResetToken.revoked_at.is_(None),
+    ]
+    if exclude_token is not None:
+        conditions.append(PasswordResetToken.id != exclude_token.id)
+    db.execute(
+        update(PasswordResetToken)
+        .where(*conditions)
+        .values(revoked_at=revoked_at)
+    )
 
 
 @router.post("/register", response_model=TokenResponse, status_code=status.HTTP_201_CREATED)
@@ -139,6 +194,72 @@ def me(current_user: CurrentUser) -> MeResponse:
     return _me_response(current_user)
 
 
+@api_router.post("/forgot-password", response_model=MessageResponse)
+def forgot_password(
+    payload: ForgotPasswordRequest,
+    request: Request,
+    db: DbSession,
+    settings: SettingsDep,
+) -> MessageResponse:
+    # TODO(rate-limit): Redis is available in the project, but no rate-limit middleware exists yet.
+    user = _user_by_email(db, str(payload.email))
+    if user is None or not user.is_active or user.password_hash is None:
+        return MessageResponse(message=FORGOT_PASSWORD_MESSAGE)
+
+    now = datetime.now(UTC)
+    _revoke_active_password_reset_tokens(db, user, now)
+    raw_token = generate_reset_token()
+    reset_token = PasswordResetToken(
+        user_id=user.id,
+        token_hash=hash_reset_token(raw_token, settings),
+        expires_at=now + timedelta(minutes=settings.reset_token_expire_minutes),
+        request_ip=_request_ip(request),
+        user_agent=_request_user_agent(request),
+    )
+    db.add(reset_token)
+    try:
+        db.commit()
+    except IntegrityError:
+        db.rollback()
+        return MessageResponse(message=FORGOT_PASSWORD_MESSAGE)
+
+    reset_url = f"{settings.frontend_url.rstrip('/')}/reset-password?token={raw_token}"
+    send_password_reset_email(user.email, reset_url)
+    return MessageResponse(message=FORGOT_PASSWORD_MESSAGE)
+
+
+@api_router.post("/reset-password", response_model=MessageResponse)
+def reset_password(
+    payload: ResetPasswordRequest,
+    db: DbSession,
+    settings: SettingsDep,
+) -> MessageResponse:
+    now = datetime.now(UTC)
+    reset_token = db.scalar(
+        select(PasswordResetToken).where(
+            PasswordResetToken.token_hash == hash_reset_token(payload.token, settings)
+        )
+    )
+    if (
+        reset_token is None
+        or reset_token.used_at is not None
+        or reset_token.revoked_at is not None
+        or _password_reset_expired(reset_token.expires_at, now)
+        or not reset_token.user.is_active
+    ):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Invalid or expired password reset token",
+        )
+
+    reset_token.user.password_hash = hash_password(payload.new_password)
+    reset_token.user.updated_at = now
+    reset_token.used_at = now
+    _revoke_active_password_reset_tokens(db, reset_token.user, now, exclude_token=reset_token)
+    db.commit()
+    return MessageResponse(message=RESET_PASSWORD_MESSAGE)
+
+
 @router.post("/change-password", status_code=status.HTTP_204_NO_CONTENT)
 def change_password(
     payload: ChangePasswordRequest,
@@ -183,13 +304,17 @@ def _get_google_client(settings: Settings) -> Any:
 
 
 @router.get("/google/login")
+@api_router.get("/google/login")
 async def google_login(request: Request, settings: SettingsDep) -> Response:
     google = _get_google_client(settings)
     return cast(Response, await google.authorize_redirect(request, settings.google_redirect_uri))
 
 
 def _oauth_error_redirect(settings: Settings) -> RedirectResponse:
-    return RedirectResponse(settings.frontend_auth_error_url, status_code=status.HTTP_302_FOUND)
+    return RedirectResponse(
+        settings.frontend_auth_error_redirect_url,
+        status_code=status.HTTP_302_FOUND,
+    )
 
 
 def _available_google_username(db: Session, email: str) -> str:
@@ -228,11 +353,17 @@ def _google_user(db: Session, userinfo: dict[str, object]) -> User:
 
 
 @router.get("/google/callback")
+@api_router.get("/google/callback")
 async def google_callback(
     request: Request,
     db: DbSession,
     settings: SettingsDep,
 ) -> Response:
+    # Authlib validates the signed state value stored in the session cookie during
+    # authorize_access_token. Missing state can fail fast before any token exchange.
+    if not request.query_params.get("state"):
+        return _oauth_error_redirect(settings)
+
     google = _get_google_client(settings)
     try:
         token_data = await google.authorize_access_token(request)
@@ -250,6 +381,9 @@ async def google_callback(
         return _oauth_error_redirect(settings)
 
     access_token = create_access_token(user, settings)
-    response = RedirectResponse(settings.frontend_auth_success_url, status_code=status.HTTP_302_FOUND)
+    response = RedirectResponse(
+        settings.frontend_auth_success_redirect_url,
+        status_code=status.HTTP_302_FOUND,
+    )
     _set_auth_cookie(response, access_token, settings)
     return response

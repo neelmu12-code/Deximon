@@ -5,11 +5,12 @@ from app.models.binder import BinderPage, BinderSlot
 from app.models.card import Card
 from app.models.chat import Conversation, Message
 from app.models.listing import Listing, ListingStatus
-from app.models.user import Profile, User
+from app.models.user import PasswordResetToken, Profile, User
 
 __all__ = [
     "User",
     "Profile",
+    "PasswordResetToken",
     "Card",
     "BinderPage",
     "BinderSlot",

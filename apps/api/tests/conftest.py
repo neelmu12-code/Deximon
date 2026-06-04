@@ -15,7 +15,7 @@ os.environ["GOOGLE_CLIENT_SECRET"] = ""
 
 from app.db.session import get_db  # noqa: E402
 from app.main import app  # noqa: E402
-from app.models.user import Profile, User  # noqa: E402
+from app.models.user import PasswordResetToken, Profile, User  # noqa: E402
 
 
 @pytest.fixture
@@ -27,6 +27,7 @@ def session_factory() -> Iterator[sessionmaker[Session]]:
     )
     User.__table__.create(engine)
     Profile.__table__.create(engine)
+    PasswordResetToken.__table__.create(engine)
     testing_session = sessionmaker(bind=engine, autoflush=False, autocommit=False)
     yield testing_session
     engine.dispose()
