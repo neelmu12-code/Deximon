@@ -85,9 +85,9 @@ export default function LoginPage() {
           <div>
             <div className="flex items-center justify-between mb-1.5">
               <label className="text-[11px] uppercase tracking-wider text-ink3">Password</label>
-              <button type="button" className="text-[12px] text-dx-blue hover:underline">
+              <Link href="/forgot-password" className="text-[12px] text-dx-blue hover:underline">
                 Forgot password?
-              </button>
+              </Link>
             </div>
             <div className="flex items-center gap-2 bg-surface2 border border-hair rounded-md px-3 h-10 focus-within:border-ink2 transition-colors">
               <svg viewBox="0 0 24 24" className="w-4 h-4 text-ink3 shrink-0" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinejoin="round">
@@ -152,7 +152,7 @@ export default function LoginPage() {
         {/* Google */}
         <button
           type="button"
-          onClick={() => window.location.assign(apiUrl("/auth/google/login"))}
+          onClick={() => window.location.assign(apiUrl("/api/auth/google/login"))}
           className="w-full h-11 rounded-md bg-white text-[#202124] text-[14px] font-medium border border-white hover:bg-[#f5f5f5] transition-colors flex items-center justify-center gap-2.5"
         >
           <svg viewBox="0 0 24 24" className="w-4 h-4">
