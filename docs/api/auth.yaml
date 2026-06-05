@@ -76,6 +76,49 @@ paths:
       summary: Handle Google OAuth callback and issue auth cookie
       responses:
         "302": { description: Redirect to configured frontend success or failure URL }
+  /api/auth/google/login:
+    get:
+      summary: Redirect to Google OAuth authorization
+      description: Preferred API-prefixed Google OAuth entrypoint. Requests scopes `openid email profile`.
+      responses:
+        "302": { description: Google authorization redirect }
+        "503": { description: Google OAuth is not configured }
+  /api/auth/google/callback:
+    get:
+      summary: Handle Google OAuth callback and issue auth cookie
+      description: Validates OAuth state, exchanges the code with Google, upserts the user by verified email, links the Google subject, sets the normal auth cookie, and redirects to the frontend.
+      responses:
+        "302": { description: Redirect to configured frontend success or failure URL }
+  /api/auth/forgot-password:
+    post:
+      summary: Request password reset instructions
+      description: Always returns the same generic success message. Existing password-enabled users receive a single-use reset link by email, or in local development via backend console logging.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/ForgotPasswordRequest" }
+      responses:
+        "200":
+          description: Generic password reset response
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/MessageResponse" }
+  /api/auth/reset-password:
+    post:
+      summary: Reset password with a single-use token
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/ResetPasswordRequest" }
+      responses:
+        "200":
+          description: Password reset
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/MessageResponse" }
+        "400": { description: Invalid, expired, used, or revoked token }
   /profiles/{username}:
     get:
       summary: Get a public user profile
@@ -148,6 +191,22 @@ components:
       properties:
         email: { type: string, format: email }
         password: { type: string, format: password }
+    ForgotPasswordRequest:
+      type: object
+      required: [email]
+      properties:
+        email: { type: string, format: email }
+    ResetPasswordRequest:
+      type: object
+      required: [token, new_password]
+      properties:
+        token: { type: string, minLength: 16, maxLength: 256 }
+        new_password: { type: string, minLength: 8, maxLength: 128, format: password }
+    MessageResponse:
+      type: object
+      required: [message]
+      properties:
+        message: { type: string }
     ProfileResponse:
       type: object
       required: [username, display_name, bio, avatar_url, binder_visibility]

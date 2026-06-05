@@ -43,6 +43,7 @@ app.mount("/static", StaticFiles(directory=settings.upload_dir, check_dir=False)
 
 app.include_router(health.router)
 app.include_router(auth.router)
+app.include_router(auth.api_router)
 app.include_router(profiles.router)
 app.include_router(cards.router)
 

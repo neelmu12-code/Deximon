@@ -1,4 +1,7 @@
+import hmac
+import secrets
 from datetime import UTC, datetime, timedelta
+from hashlib import sha256
 from typing import Any, cast
 
 from jose import JWTError, jwt
@@ -21,6 +24,18 @@ def verify_password(password: str, hashed_password: str | None) -> bool:
         return password_context.verify(password, hashed_password)
     except ValueError:
         return False
+
+
+def generate_reset_token() -> str:
+    return secrets.token_urlsafe(48)
+
+
+def hash_reset_token(token: str, settings: Settings) -> str:
+    return hmac.new(
+        settings.jwt_secret_key.encode("utf-8"),
+        token.encode("utf-8"),
+        sha256,
+    ).hexdigest()
 
 
 def create_access_token(user: User, settings: Settings) -> str:

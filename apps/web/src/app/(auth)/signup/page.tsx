@@ -186,7 +186,7 @@ export default function SignupPage() {
         {/* Google */}
         <button
           type="button"
-          onClick={() => window.location.assign(apiUrl("/auth/google/login"))}
+          onClick={() => window.location.assign(apiUrl("/api/auth/google/login"))}
           className="w-full h-11 rounded-md bg-white text-[#202124] text-[14px] font-medium border border-white hover:bg-[#f5f5f5] transition-colors flex items-center justify-center gap-2.5"
         >
           <svg viewBox="0 0 24 24" className="w-4 h-4">

@@ -22,11 +22,17 @@ class Settings(BaseSettings):
         gt=0,
         validation_alias=AliasChoices("ACCESS_TOKEN_EXPIRE_MINUTES", "ACCESS_TOKEN_TTL_MINUTES"),
     )
+    reset_token_expire_minutes: int = Field(
+        default=30,
+        gt=0,
+        alias="RESET_TOKEN_EXPIRE_MINUTES",
+    )
 
     frontend_origin: str = Field(
         default="http://localhost:3000",
         validation_alias=AliasChoices("FRONTEND_ORIGIN", "API_CORS_ORIGINS"),
     )
+    frontend_url: str = Field(default="http://localhost:3000", alias="FRONTEND_URL")
     backend_base_url: str = Field(default="http://localhost:8000", alias="BACKEND_BASE_URL")
 
     google_client_id: str = Field(
@@ -38,13 +44,13 @@ class Settings(BaseSettings):
         validation_alias=AliasChoices("GOOGLE_CLIENT_SECRET", "GOOGLE_OAUTH_CLIENT_SECRET"),
     )
     google_redirect_uri: str = Field(
-        default="http://localhost:8000/auth/google/callback", alias="GOOGLE_REDIRECT_URI"
+        default="http://localhost:8000/api/auth/google/callback", alias="GOOGLE_REDIRECT_URI"
     )
-    frontend_auth_success_url: str = Field(
-        default="http://localhost:3000/auth/success", alias="FRONTEND_AUTH_SUCCESS_URL"
+    frontend_auth_success_url: str | None = Field(
+        default=None, alias="FRONTEND_AUTH_SUCCESS_URL"
     )
-    frontend_auth_error_url: str = Field(
-        default="http://localhost:3000/login?error=oauth_failed", alias="FRONTEND_AUTH_ERROR_URL"
+    frontend_auth_error_url: str | None = Field(
+        default=None, alias="FRONTEND_AUTH_ERROR_URL"
     )
 
     auth_cookie_name: str = Field(default="access_token", alias="AUTH_COOKIE_NAME")
@@ -63,11 +69,26 @@ class Settings(BaseSettings):
 
     @property
     def cors_origin_list(self) -> list[str]:
-        return [origin.strip() for origin in self.frontend_origin.split(",") if origin.strip()]
+        origins: list[str] = []
+        for origin in [*self.frontend_origin.split(","), self.frontend_url]:
+            normalized = origin.strip().rstrip("/")
+            if normalized and normalized not in origins:
+                origins.append(normalized)
+        return origins
 
     @property
     def google_oauth_enabled(self) -> bool:
         return bool(self.google_client_id and self.google_client_secret)
+
+    @property
+    def frontend_auth_success_redirect_url(self) -> str:
+        return self.frontend_auth_success_url or self.frontend_url.rstrip("/")
+
+    @property
+    def frontend_auth_error_redirect_url(self) -> str:
+        if self.frontend_auth_error_url:
+            return self.frontend_auth_error_url
+        return f"{self.frontend_url.rstrip('/')}/login?error=oauth_failed"
 
     @property
     def oauth_session_secret(self) -> str:
