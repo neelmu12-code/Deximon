@@ -8,7 +8,7 @@ from fastapi.staticfiles import StaticFiles
 from starlette.middleware.sessions import SessionMiddleware
 
 from app.core.config import get_settings
-from app.routes import auth, health, profiles
+from app.routes import auth, cards, health, profiles
 
 settings = get_settings()
 
@@ -44,6 +44,7 @@ app.mount("/static", StaticFiles(directory=settings.upload_dir, check_dir=False)
 app.include_router(health.router)
 app.include_router(auth.router)
 app.include_router(profiles.router)
+app.include_router(cards.router)
 
 
 @app.get("/")
