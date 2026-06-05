@@ -44,3 +44,77 @@ body {
 .animate-ticker {
   animation: ticker-scroll 60s linear infinite;
 }
+
+/* ── Binder ── */
+
+.leather {
+  background: linear-gradient(160deg, #2a1a0a 0%, #1a0d05 55%, #0e0803 100%);
+}
+.leather-grain::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='200' height='200'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.75' numOctaves='4' stitchTiles='stitch'/%3E%3CfeColorMatrix type='saturate' values='0'/%3E%3C/filter%3E%3Crect width='200' height='200' filter='url(%23n)' opacity='0.04'/%3E%3C/svg%3E");
+  pointer-events: none;
+  border-radius: inherit;
+  z-index: 0;
+}
+
+.parchment {
+  background: linear-gradient(180deg, #f5ead8 0%, #ecdcc0 100%);
+}
+.parchment-grain::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='200' height='200'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.65' numOctaves='4' stitchTiles='stitch'/%3E%3CfeColorMatrix type='saturate' values='0'/%3E%3C/filter%3E%3Crect width='200' height='200' filter='url(%23n)' opacity='0.055'/%3E%3C/svg%3E");
+  pointer-events: none;
+  border-radius: inherit;
+  z-index: 0;
+}
+
+.persp        { perspective: 1800px; }
+.preserve-3d  { transform-style: preserve-3d; }
+.backface-hidden { backface-visibility: hidden; }
+
+.flip-origin-left  { transform-origin: left center; }
+.flip-origin-right { transform-origin: right center; }
+
+@keyframes flip-forward {
+  0%   { transform: rotateY(0deg); }
+  100% { transform: rotateY(-180deg); }
+}
+@keyframes flip-backward {
+  0%   { transform: rotateY(0deg); }
+  100% { transform: rotateY(180deg); }
+}
+.flipping-fwd  { animation: flip-forward  0.85s ease-in-out forwards; }
+.flipping-back { animation: flip-backward 0.85s ease-in-out forwards; }
+
+.ring-metal {
+  background: conic-gradient(
+    #888 0deg, #ccc 60deg, #555 120deg, #aaa 180deg, #444 240deg, #bbb 300deg, #888 360deg
+  );
+}
+
+.sleeve-sheen {
+  background: linear-gradient(135deg, rgba(255,255,255,0.07) 0%, transparent 50%, rgba(255,255,255,0.03) 100%);
+}
+
+.card-ratio { aspect-ratio: 5 / 7; }
+
+.script {
+  font-family: 'Dancing Script', cursive;
+  font-weight: 700;
+}
+.gold-foil {
+  background: linear-gradient(160deg, #f5d97a 0%, #c8a227 40%, #f5d97a 60%, #a07818 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+
+@keyframes slideIn {
+  from { transform: translateX(20px); opacity: 0; }
+  to   { transform: translateX(0);    opacity: 1; }
+}
