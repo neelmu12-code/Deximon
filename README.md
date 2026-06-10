@@ -25,8 +25,8 @@ docs/
 # 1. Copy env and set JWT_SECRET_KEY to a strong local secret
 cp .env.example .env
 
-# 2. Bring up the local stack
-docker compose up --build
+# 2. Bring up the local stack and run migrations
+./scripts/dev-up.ps1 -Build
 
 # 3. Open services
 # - Web        http://localhost:3000
@@ -34,9 +34,18 @@ docker compose up --build
 # - Scanner    http://localhost:8001/healthz
 ```
 
-After the API container is up, run migrations once:
+If you prefer raw Docker commands, run migrations once after the API container is up:
 
 ```bash
 docker compose exec api alembic upgrade head
 docker compose exec api python -m app.scripts.seed
+```
+
+Useful local scripts:
+
+```powershell
+./scripts/dev-up.ps1          # start stack and run migrations
+./scripts/dev-up.ps1 -Build   # rebuild images, start stack, run migrations
+./scripts/dev-migrate.ps1     # start API dependencies and run Alembic
+./scripts/dev-reset.ps1 -Force # delete Docker volumes, rebuild, migrate, seed
 ```

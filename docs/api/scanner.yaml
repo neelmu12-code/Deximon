@@ -16,5 +16,87 @@ paths:
           content:
             application/json:
               schema: { type: object, properties: { status: { type: string } } }
+  /health:
+    get:
+      summary: Health check
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema: { type: object, properties: { status: { type: string } } }
+  /scan/mock:
+    post:
+      summary: Local mock scanner
+      description: Accepts a jpg, jpeg, png, or webp image and returns a deterministic local fuzzy-matched Pokemon card candidate without AWS.
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required: [file]
+              properties:
+                file: { type: string, format: binary }
+                q: { type: string, nullable: true }
+      responses:
+        "200":
+          description: Candidate scan result
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ScanResponse" }
+        "400": { description: Invalid image }
+        "415": { description: Unsupported media type }
+  /scan:
+    post:
+      summary: AWS-backed scanner
+      description: Preprocesses an image, uploads it to S3, runs Rekognition OCR, and fuzzy matches OCR text to Pokemon TCG cards. Returns 503 until AWS/S3 is configured.
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required: [file]
+              properties:
+                file: { type: string, format: binary }
+      responses:
+        "200":
+          description: Candidate scan result
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ScanResponse" }
+        "400": { description: Invalid image }
+        "503": { description: AWS scanner not configured }
 components:
-  schemas: {}
+  schemas:
+    ImageInfo:
+      type: object
+      required: [width, height, format, mode, processed_bytes]
+      properties:
+        width: { type: integer }
+        height: { type: integer }
+        format: { type: string }
+        mode: { type: string }
+        processed_bytes: { type: integer }
+    ScanCandidate:
+      type: object
+      required: [id, name, set_name, set_code, number, confidence]
+      properties:
+        id: { type: string }
+        name: { type: string }
+        set_name: { type: string }
+        set_code: { type: string }
+        number: { type: string }
+        rarity: { type: ["string", "null"] }
+        image_url: { type: ["string", "null"], format: uri }
+        confidence: { type: number, minimum: 0, maximum: 1 }
+    ScanResponse:
+      type: object
+      required: [candidate, image, source, ocr_text]
+      properties:
+        candidate: { $ref: "#/components/schemas/ScanCandidate" }
+        image: { $ref: "#/components/schemas/ImageInfo" }
+        source: { type: string }
+        ocr_text: { type: array, items: { type: string } }
+        image_key: { type: ["string", "null"] }
