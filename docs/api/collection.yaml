@@ -1,11 +1,243 @@
 openapi: 3.1.0
 info:
-  title: Deximon — Collection & Marketplace API
-  version: 0.0.1
-  description: Service 2 (S2). Binder, cards, listings, marketplace search.
+  title: Deximon - Collection & Marketplace API
+  version: 0.1.0
+  description: Binder cards, binder slots, listings, and marketplace search.
 servers:
   - url: http://localhost:8000
     description: Local
-paths: {}
+paths:
+  /binder/me:
+    get:
+      summary: Get the authenticated user's binder pages.
+      security:
+        - cookieAuth: []
+        - bearerAuth: []
+      responses:
+        "200":
+          description: Binder payload.
+  /binder/cards:
+    get:
+      summary: List cards owned by the authenticated user.
+      security:
+        - cookieAuth: []
+        - bearerAuth: []
+      responses:
+        "200":
+          description: Owned cards.
+    post:
+      summary: Create an owned card from manual add or scanner confirmation.
+      security:
+        - cookieAuth: []
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/OwnedCardCreate"
+      responses:
+        "201":
+          description: Created card.
+  /binder/pages/{page_index}/slots/{slot_index}:
+    put:
+      summary: Assign or clear a card in a binder slot.
+      security:
+        - cookieAuth: []
+        - bearerAuth: []
+      parameters:
+        - name: page_index
+          in: path
+          required: true
+          schema:
+            type: integer
+            minimum: 0
+        - name: slot_index
+          in: path
+          required: true
+          schema:
+            type: integer
+            minimum: 0
+            maximum: 8
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                card_id:
+                  type: string
+                  format: uuid
+                  nullable: true
+      responses:
+        "200":
+          description: Updated binder.
+  /binder/move:
+    post:
+      summary: Move a card between binder slots, swapping with the destination if needed.
+      security:
+        - cookieAuth: []
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/BinderMoveRequest"
+      responses:
+        "200":
+          description: Updated binder.
+  /market/listings:
+    get:
+      summary: Search public marketplace listings.
+      parameters:
+        - name: q
+          in: query
+          schema:
+            type: string
+        - name: status
+          in: query
+          schema:
+            $ref: "#/components/schemas/ListingStatus"
+        - name: set_code
+          in: query
+          schema:
+            type: string
+        - name: rarity
+          in: query
+          schema:
+            type: string
+        - name: condition
+          in: query
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Listings.
+    post:
+      summary: Create a listing from one of the authenticated user's owned cards.
+      security:
+        - cookieAuth: []
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ListingCreate"
+      responses:
+        "201":
+          description: Created listing.
+  /market/listings/{listing_id}:
+    get:
+      summary: Get a listing detail payload.
+      parameters:
+        - name: listing_id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "200":
+          description: Listing detail.
+    patch:
+      summary: Update asking price or listing status. Seller only.
+      security:
+        - cookieAuth: []
+        - bearerAuth: []
+      parameters:
+        - name: listing_id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ListingUpdate"
+      responses:
+        "200":
+          description: Updated listing.
 components:
-  schemas: {}
+  securitySchemes:
+    cookieAuth:
+      type: apiKey
+      in: cookie
+      name: access_token
+    bearerAuth:
+      type: http
+      scheme: bearer
+  schemas:
+    HoloType:
+      type: string
+      enum: [normal, holo, reverse_holo]
+    ListingStatus:
+      type: string
+      enum: [available, on_hold, sold, cancelled]
+    OwnedCardCreate:
+      type: object
+      required: [name]
+      properties:
+        name:
+          type: string
+        set_code:
+          type: string
+          nullable: true
+        number:
+          type: string
+          nullable: true
+        rarity:
+          type: string
+          nullable: true
+        condition:
+          type: string
+          nullable: true
+        language:
+          type: string
+          nullable: true
+        holo_type:
+          $ref: "#/components/schemas/HoloType"
+        notes:
+          type: string
+          nullable: true
+    BinderMoveRequest:
+      type: object
+      required: [from_page_index, from_slot_index, to_page_index, to_slot_index]
+      properties:
+        from_page_index:
+          type: integer
+          minimum: 0
+        from_slot_index:
+          type: integer
+          minimum: 0
+          maximum: 8
+        to_page_index:
+          type: integer
+          minimum: 0
+        to_slot_index:
+          type: integer
+          minimum: 0
+          maximum: 8
+    ListingCreate:
+      type: object
+      required: [card_id]
+      properties:
+        card_id:
+          type: string
+          format: uuid
+        asking_price:
+          type: number
+          nullable: true
+    ListingUpdate:
+      type: object
+      properties:
+        asking_price:
+          type: number
+          nullable: true
+        status:
+          $ref: "#/components/schemas/ListingStatus"

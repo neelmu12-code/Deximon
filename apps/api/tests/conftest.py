@@ -13,9 +13,21 @@ os.environ["FRONTEND_ORIGIN"] = "http://localhost:3000"
 os.environ["GOOGLE_CLIENT_ID"] = ""
 os.environ["GOOGLE_CLIENT_SECRET"] = ""
 
+from app.db.base import Base  # noqa: E402
 from app.db.session import get_db  # noqa: E402
 from app.main import app  # noqa: E402
-from app.models.user import PasswordResetToken, Profile, User  # noqa: E402
+from app.models import (  # noqa: E402,F401
+    BinderPage,
+    BinderSlot,
+    Card,
+    Conversation,
+    Listing,
+    Message,
+    PasswordResetToken,
+    Profile,
+    TcgCard,
+    User,
+)
 
 
 @pytest.fixture
@@ -25,11 +37,10 @@ def session_factory() -> Iterator[sessionmaker[Session]]:
         connect_args={"check_same_thread": False},
         poolclass=StaticPool,
     )
-    User.__table__.create(engine)
-    Profile.__table__.create(engine)
-    PasswordResetToken.__table__.create(engine)
+    Base.metadata.create_all(engine)
     testing_session = sessionmaker(bind=engine, autoflush=False, autocommit=False)
     yield testing_session
+    Base.metadata.drop_all(engine)
     engine.dispose()
 
 
