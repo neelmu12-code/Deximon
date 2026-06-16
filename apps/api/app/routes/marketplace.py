@@ -64,6 +64,7 @@ def _listing_response(db: Session, listing: Listing) -> ListingResponse:
         card_id=listing.card_id,
         seller_id=listing.seller_id,
         asking_price=_price_to_float(listing.asking_price),
+        notes=listing.notes,
         status=listing.status,
         created_at=listing.created_at,
         updated_at=listing.updated_at,
@@ -73,6 +74,7 @@ def _listing_response(db: Session, listing: Listing) -> ListingResponse:
             set_code=card.set_code,
             number=card.number,
             rarity=card.rarity,
+            card_type=card.card_type,
             condition=card.condition,
             language=card.language,
             holo_type=_holo_type(card),
@@ -98,8 +100,9 @@ def list_listings(
     db: DbSession,
     q: Annotated[str | None, Query(min_length=1, max_length=100)] = None,
     status_filter: Annotated[ListingStatus | None, Query(alias="status")] = None,
-    set_code: Annotated[str | None, Query(max_length=20)] = None,
+    set_code: Annotated[str | None, Query(alias="set", max_length=20)] = None,
     rarity: Annotated[str | None, Query(max_length=40)] = None,
+    card_type: Annotated[str | None, Query(alias="type", max_length=40)] = None,
     condition: Annotated[str | None, Query(max_length=20)] = None,
     limit: Annotated[int, Query(ge=1, le=50)] = 24,
     offset: Annotated[int, Query(ge=0)] = 0,
@@ -124,6 +127,8 @@ def list_listings(
         stmt = stmt.where(Card.set_code.ilike(set_code))
     if rarity:
         stmt = stmt.where(Card.rarity.ilike(rarity))
+    if card_type:
+        stmt = stmt.where(Card.card_type.ilike(card_type))
     if condition:
         stmt = stmt.where(Card.condition.ilike(condition))
 
@@ -152,6 +157,7 @@ def create_listing(
         card_id=card.id,
         seller_id=current_user.id,
         asking_price=float(payload.asking_price) if payload.asking_price is not None else None,
+        notes=payload.notes,
         status=ListingStatus.AVAILABLE,
     )
     db.add(listing)
@@ -189,6 +195,9 @@ def update_listing(
     if "asking_price" in updates:
         asking_price = updates["asking_price"]
         listing.asking_price = float(asking_price) if asking_price is not None else None
+
+    if "notes" in updates:
+        listing.notes = updates["notes"]
 
     db.commit()
     db.refresh(listing)

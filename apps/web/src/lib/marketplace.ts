@@ -6,6 +6,7 @@ export type ListingCard = {
   set_code: string | null;
   number: string | null;
   rarity: string | null;
+  card_type: string | null;
   condition: string | null;
   language: string | null;
   holo_type: "normal" | "holo" | "reverse_holo";
@@ -23,6 +24,7 @@ export type Listing = {
   card_id: string;
   seller_id: string;
   asking_price: number | null;
+  notes: string | null;
   status: ListingStatus;
   created_at: string;
   updated_at: string;

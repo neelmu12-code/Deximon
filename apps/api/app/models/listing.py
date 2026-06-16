@@ -2,7 +2,7 @@ import enum
 from datetime import datetime
 from uuid import UUID, uuid4
 
-from sqlalchemy import DateTime, Enum, ForeignKey, Numeric, func
+from sqlalchemy import DateTime, Enum, ForeignKey, Numeric, String, func
 from sqlalchemy.dialects.postgresql import UUID as PG_UUID
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -33,6 +33,7 @@ class Listing(Base):
     )
 
     asking_price: Mapped[float | None] = mapped_column(Numeric(10, 2), nullable=True)
+    notes: Mapped[str | None] = mapped_column(String(500), nullable=True)
     status: Mapped[ListingStatus] = mapped_column(
         Enum(
             ListingStatus,
