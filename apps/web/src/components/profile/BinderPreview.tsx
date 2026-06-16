@@ -14,7 +14,7 @@ export type CardSlot = {
   num: string;
   rarity: string;
   image: string;
-  listed?: { price: number; status: "Available" | "On Hold" | "Sold" };
+  listed?: { listingId?: string; price: number; status: "Available" | "On Hold" | "Sold" };
 } | null;
 
 type Props = {

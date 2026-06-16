@@ -22,6 +22,7 @@ class Card(Base):
     set_code: Mapped[str | None] = mapped_column(String(20), nullable=True, index=True)
     number: Mapped[str | None] = mapped_column(String(20), nullable=True)
     rarity: Mapped[str | None] = mapped_column(String(40), nullable=True, index=True)
+    card_type: Mapped[str | None] = mapped_column(String(40), nullable=True, index=True)
     condition: Mapped[str | None] = mapped_column(String(20), nullable=True)
     language: Mapped[str | None] = mapped_column(String(10), nullable=True)
     is_holo: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)

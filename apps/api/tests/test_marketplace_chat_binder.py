@@ -21,21 +21,30 @@ def auth_headers(auth_body: dict[str, object]) -> dict[str, str]:
     return {"Authorization": f"Bearer {auth_body['access_token']}"}
 
 
-def create_card(client: TestClient, headers: dict[str, str], name: str = "Charizard") -> dict[str, object]:
+def create_card(
+    client: TestClient,
+    headers: dict[str, str],
+    name: str = "Charizard",
+    set_code: str = "base1",
+    rarity: str = "Rare Holo",
+    card_type: str = "Fire",
+) -> dict[str, object]:
     response = client.post(
         "/binder/cards",
         headers=headers,
         json={
             "name": name,
-            "set_code": "base1",
+            "set_code": set_code,
             "number": "4",
-            "rarity": "Rare Holo",
+            "rarity": rarity,
+            "card_type": card_type,
             "condition": "NM",
             "language": "EN",
             "holo_type": "holo",
         },
     )
     assert response.status_code == 201
+    assert response.json()["card_type"] == card_type
     return response.json()
 
 
@@ -44,12 +53,12 @@ def create_listing(
     headers: dict[str, str],
     card_id: str,
     asking_price: str = "250.00",
+    notes: str | None = None,
 ) -> dict[str, object]:
-    response = client.post(
-        "/market/listings",
-        headers=headers,
-        json={"card_id": card_id, "asking_price": asking_price},
-    )
+    body: dict[str, object] = {"card_id": card_id, "asking_price": asking_price}
+    if notes is not None:
+        body["notes"] = notes
+    response = client.post("/market/listings", headers=headers, json=body)
     assert response.status_code == 201
     return response.json()
 
@@ -91,10 +100,12 @@ def test_marketplace_listing_search_ownership_and_status_transitions(client: Tes
     buyer_headers = auth_headers(buyer)
     card = create_card(client, seller_headers)
 
-    listing = create_listing(client, seller_headers, str(card["id"]))
+    listing = create_listing(client, seller_headers, str(card["id"]), notes="Mint, pack-fresh.")
     assert listing["card"]["name"] == "Charizard"
+    assert listing["card"]["card_type"] == "Fire"
     assert listing["seller"]["username"] == "seller"
     assert listing["status"] == "available"
+    assert listing["notes"] == "Mint, pack-fresh."
 
     duplicate = client.post(
         "/market/listings",
@@ -176,3 +187,61 @@ def test_listing_scoped_conversation_and_messages(client: TestClient) -> None:
 
     outsider_view = client.get(f"/conversations/{conversation_id}", headers=outsider_headers)
     assert outsider_view.status_code == 403
+
+
+def test_marketplace_filters_by_set_rarity_and_type(client: TestClient) -> None:
+    seller = register_user(client, "seller@example.com", "seller")
+    headers = auth_headers(seller)
+
+    fire = create_card(
+        client, headers, name="Charizard", set_code="base1", rarity="Rare Holo", card_type="Fire"
+    )
+    water = create_card(
+        client, headers, name="Blastoise", set_code="base1", rarity="Rare", card_type="Water"
+    )
+    psychic = create_card(
+        client, headers, name="Mewtwo", set_code="jungle", rarity="Rare Holo", card_type="Psychic"
+    )
+    for card in (fire, water, psychic):
+        create_listing(client, headers, str(card["id"]))
+
+    by_type = client.get("/market/listings?type=Water")
+    assert by_type.status_code == 200
+    assert [row["card"]["name"] for row in by_type.json()] == ["Blastoise"]
+
+    by_set = client.get("/market/listings?set=jungle")
+    assert [row["card"]["name"] for row in by_set.json()] == ["Mewtwo"]
+
+    by_rarity = client.get("/market/listings?rarity=Rare Holo")
+    names = sorted(row["card"]["name"] for row in by_rarity.json())
+    assert names == ["Charizard", "Mewtwo"]
+
+
+def test_listing_notes_update_and_cancelled_hidden_from_default_search(client: TestClient) -> None:
+    seller = register_user(client, "seller@example.com", "seller")
+    headers = auth_headers(seller)
+    card = create_card(client, headers)
+    listing = create_listing(client, headers, str(card["id"]), notes="Original note")
+
+    updated = client.patch(
+        f"/market/listings/{listing['id']}",
+        headers=headers,
+        json={"notes": "Updated note", "asking_price": "300.00"},
+    )
+    assert updated.status_code == 200
+    assert updated.json()["notes"] == "Updated note"
+    assert updated.json()["asking_price"] == 300.0
+
+    cancelled = client.patch(
+        f"/market/listings/{listing['id']}",
+        headers=headers,
+        json={"status": "cancelled"},
+    )
+    assert cancelled.status_code == 200
+
+    # Default search excludes cancelled listings...
+    default_search = client.get("/market/listings")
+    assert all(row["status"] != "cancelled" for row in default_search.json())
+    # ...but an explicit status filter can still surface them.
+    explicit = client.get("/market/listings?status=cancelled")
+    assert [row["id"] for row in explicit.json()] == [listing["id"]]

@@ -153,6 +153,10 @@ export function ListingDetailClient({ id }: { id: string }) {
               <dd className="font-medium">{listing.card.rarity ?? "Pending"}</dd>
             </div>
             <div>
+              <dt className="text-neutral-500">Type</dt>
+              <dd className="font-medium">{listing.card.card_type ?? "Pending"}</dd>
+            </div>
+            <div>
               <dt className="text-neutral-500">Condition</dt>
               <dd className="font-medium">{listing.card.condition ?? "Pending"}</dd>
             </div>
@@ -165,6 +169,13 @@ export function ListingDetailClient({ id }: { id: string }) {
               <dd className="font-medium">{listing.card.language ?? "Pending"}</dd>
             </div>
           </dl>
+
+          {listing.notes && (
+            <div className="mt-5 border-t border-neutral-200 pt-4 dark:border-neutral-800">
+              <div className="text-sm text-neutral-500">Seller notes</div>
+              <p className="mt-1 whitespace-pre-wrap text-sm">{listing.notes}</p>
+            </div>
+          )}
         </div>
 
         <aside className="space-y-4 rounded border border-neutral-300 p-5 dark:border-neutral-800">

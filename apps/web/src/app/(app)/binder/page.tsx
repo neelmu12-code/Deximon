@@ -64,6 +64,18 @@ export default function BinderPage() {
     setShowManualAdd(true);
   }, []);
 
+  function handleCardListed({ listingId, price }: { listingId: string; price: number }) {
+    const listed = { listingId, price, status: "Available" as const };
+    setPages((prev) => {
+      const next = prev.map((page) =>
+        page.map((slot) => (slot && slot === detailCard ? { ...slot, listed } : slot)),
+      );
+      localStorage.setItem(STORAGE_KEYS.pages, JSON.stringify(next));
+      return next;
+    });
+    setDetailCard((current) => (current ? { ...current, listed } : current));
+  }
+
   function handlePick(card: NonNullable<CardSlot>) {
     setPages((prev) => {
       const next = prev.map((p) => [...p]);
@@ -180,6 +192,7 @@ export default function BinderPage() {
         <CardDetailPanel
           card={detailCard}
           onClose={() => setDetailCard(null)}
+          onListed={handleCardListed}
         />
       )}
     </div>

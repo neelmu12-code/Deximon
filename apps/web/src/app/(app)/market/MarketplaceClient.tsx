@@ -21,6 +21,10 @@ function errorMessage(error: unknown): string {
 export function MarketplaceClient() {
   const [query, setQuery] = useState("");
   const [statusFilter, setStatusFilter] = useState<"" | ListingStatus>("");
+  const [setCode, setSetCode] = useState("");
+  const [rarity, setRarity] = useState("");
+  const [cardType, setCardType] = useState("");
+  const [condition, setCondition] = useState("");
   const [listings, setListings] = useState<Listing[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -30,8 +34,25 @@ export function MarketplaceClient() {
     const trimmed = query.trim();
     if (trimmed) search.set("q", trimmed);
     if (statusFilter) search.set("status", statusFilter);
+    if (setCode.trim()) search.set("set", setCode.trim());
+    if (rarity.trim()) search.set("rarity", rarity.trim());
+    if (cardType.trim()) search.set("type", cardType.trim());
+    if (condition.trim()) search.set("condition", condition.trim());
     return search.toString();
-  }, [query, statusFilter]);
+  }, [query, statusFilter, setCode, rarity, cardType, condition]);
+
+  const hasFilters = Boolean(
+    query || statusFilter || setCode || rarity || cardType || condition,
+  );
+
+  function clearFilters() {
+    setQuery("");
+    setStatusFilter("");
+    setSetCode("");
+    setRarity("");
+    setCardType("");
+    setCondition("");
+  }
 
   useEffect(() => {
     const controller = new AbortController();
@@ -93,6 +114,64 @@ export function MarketplaceClient() {
               ))}
             </select>
           </label>
+
+          <label className="block space-y-1">
+            <span className="text-xs font-medium uppercase tracking-wide text-neutral-500">
+              Set
+            </span>
+            <input
+              value={setCode}
+              onChange={(event) => setSetCode(event.target.value)}
+              placeholder="e.g. base1"
+              className="w-full rounded border border-neutral-300 bg-transparent px-3 py-2 text-sm outline-none focus:border-neutral-500 dark:border-neutral-700"
+            />
+          </label>
+
+          <label className="block space-y-1">
+            <span className="text-xs font-medium uppercase tracking-wide text-neutral-500">
+              Rarity
+            </span>
+            <input
+              value={rarity}
+              onChange={(event) => setRarity(event.target.value)}
+              placeholder="e.g. Rare Holo"
+              className="w-full rounded border border-neutral-300 bg-transparent px-3 py-2 text-sm outline-none focus:border-neutral-500 dark:border-neutral-700"
+            />
+          </label>
+
+          <label className="block space-y-1">
+            <span className="text-xs font-medium uppercase tracking-wide text-neutral-500">
+              Type
+            </span>
+            <input
+              value={cardType}
+              onChange={(event) => setCardType(event.target.value)}
+              placeholder="e.g. Fire"
+              className="w-full rounded border border-neutral-300 bg-transparent px-3 py-2 text-sm outline-none focus:border-neutral-500 dark:border-neutral-700"
+            />
+          </label>
+
+          <label className="block space-y-1">
+            <span className="text-xs font-medium uppercase tracking-wide text-neutral-500">
+              Condition
+            </span>
+            <input
+              value={condition}
+              onChange={(event) => setCondition(event.target.value)}
+              placeholder="e.g. NM"
+              className="w-full rounded border border-neutral-300 bg-transparent px-3 py-2 text-sm outline-none focus:border-neutral-500 dark:border-neutral-700"
+            />
+          </label>
+
+          {hasFilters && (
+            <button
+              type="button"
+              onClick={clearFilters}
+              className="w-full rounded border border-neutral-300 px-3 py-2 text-xs font-medium text-neutral-600 transition hover:border-neutral-500 dark:border-neutral-700 dark:text-neutral-400"
+            >
+              Clear filters
+            </button>
+          )}
         </aside>
 
         <div className="space-y-3">
@@ -126,7 +205,12 @@ export function MarketplaceClient() {
                   <div>
                     <h2 className="font-semibold">{listing.card.name}</h2>
                     <p className="text-sm text-neutral-600 dark:text-neutral-400">
-                      {[listing.card.set_code, listing.card.number, listing.card.rarity]
+                      {[
+                        listing.card.set_code,
+                        listing.card.number,
+                        listing.card.rarity,
+                        listing.card.card_type,
+                      ]
                         .filter(Boolean)
                         .join(" - ") || "Card details pending"}
                     </p>

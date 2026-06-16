@@ -1,9 +1,13 @@
 import Image from "next/image";
+import Link from "next/link";
+import { useState } from "react";
 import type { CardSlot } from "@/lib/binderTypes";
+import { ListCardModal } from "./ListCardModal";
 
 type Props = {
   card: NonNullable<CardSlot>;
   onClose: () => void;
+  onListed: (result: { listingId: string; price: number }) => void;
 };
 
 function ComingSoonButton({ label, variant }: { label: string; variant: "primary" | "ghost" | "danger" }) {
@@ -25,7 +29,9 @@ function ComingSoonButton({ label, variant }: { label: string; variant: "primary
   );
 }
 
-export function CardDetailPanel({ card, onClose }: Props) {
+export function CardDetailPanel({ card, onClose, onListed }: Props) {
+  const [showListModal, setShowListModal] = useState(false);
+
   return (
     <div className="fixed inset-0 z-50">
       <div className="absolute inset-0 bg-black/60" onClick={onClose} />
@@ -89,18 +95,41 @@ export function CardDetailPanel({ card, onClose }: Props) {
           <div className="space-y-2 pt-2">
             {card.listed ? (
               <>
-                <ComingSoonButton label="Edit listing" variant="primary" />
+                {card.listed.listingId ? (
+                  <Link
+                    href={`/market/${card.listed.listingId}`}
+                    className="block w-full py-2.5 rounded-lg text-sm font-medium bg-dx-red text-white text-center hover:bg-dx-red-hover transition-colors"
+                  >
+                    View listing
+                  </Link>
+                ) : (
+                  <ComingSoonButton label="Edit listing" variant="primary" />
+                )}
                 <ComingSoonButton label="Unlist" variant="ghost" />
               </>
             ) : (
               <>
-                <ComingSoonButton label="List this card" variant="primary" />
+                <button
+                  type="button"
+                  onClick={() => setShowListModal(true)}
+                  className="w-full py-2.5 rounded-lg text-sm font-medium bg-dx-red text-white hover:bg-dx-red-hover transition-colors"
+                >
+                  List this card
+                </button>
                 <ComingSoonButton label="Remove" variant="danger" />
               </>
             )}
           </div>
         </div>
       </div>
+
+      {showListModal && (
+        <ListCardModal
+          card={card}
+          onClose={() => setShowListModal(false)}
+          onListed={onListed}
+        />
+      )}
     </div>
   );
 }

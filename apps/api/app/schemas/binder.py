@@ -12,6 +12,7 @@ class OwnedCardCreate(BaseModel):
     set_code: str | None = Field(default=None, max_length=20)
     number: str | None = Field(default=None, max_length=20)
     rarity: str | None = Field(default=None, max_length=40)
+    card_type: str | None = Field(default=None, max_length=40)
     condition: str | None = Field(default=None, max_length=20)
     language: str | None = Field(default=None, max_length=10)
     holo_type: HoloType = "normal"
@@ -25,6 +26,7 @@ class OwnedCardResponse(BaseModel):
     set_code: str | None
     number: str | None
     rarity: str | None
+    card_type: str | None
     condition: str | None
     language: str | None
     holo_type: HoloType
