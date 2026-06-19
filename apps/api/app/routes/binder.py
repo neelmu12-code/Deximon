@@ -19,6 +19,7 @@ from app.schemas.binder import (
     HoloType,
     OwnedCardCreate,
     OwnedCardResponse,
+    OwnedCardUpdate,
 )
 
 router = APIRouter(prefix="/binder", tags=["binder"])
@@ -48,6 +49,7 @@ def _card_response(card: Card) -> OwnedCardResponse:
         condition=card.condition,
         language=card.language,
         holo_type=_holo_type(card),
+        image_url=card.image_url,
         notes=card.notes,
         created_at=card.created_at,
     )
@@ -58,6 +60,40 @@ def _get_owned_card(db: Session, user_id: UUID, card_id: UUID) -> Card:
     if card is None or card.owner_id != user_id:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Card not found")
     return card
+
+
+def _place_card_in_next_slot(db: Session, user_id: UUID, card_id: UUID) -> None:
+    """Find the first empty slot across all pages and place the card there.
+    If all pages are full, create a new page."""
+    pages = list(
+        db.scalars(
+            select(BinderPage)
+            .where(BinderPage.user_id == user_id)
+            .order_by(BinderPage.page_index)
+        )
+    )
+    if not pages:
+        pages = [_get_or_create_page(db, user_id, 0)]
+
+    for page in pages:
+        slots = {
+            slot.slot_index: slot
+            for slot in db.scalars(
+                select(BinderSlot).where(BinderSlot.page_id == page.id)
+            )
+        }
+        for slot_index in range(9):
+            if slot_index not in slots:
+                db.add(BinderSlot(page_id=page.id, slot_index=slot_index, card_id=card_id))
+                return
+            elif slots[slot_index].card_id is None:
+                slots[slot_index].card_id = card_id
+                return
+
+    # All pages are full — start a new one
+    next_index = pages[-1].page_index + 1
+    new_page = _get_or_create_page(db, user_id, next_index)
+    db.add(BinderSlot(page_id=new_page.id, slot_index=0, card_id=card_id))
 
 
 def _get_or_create_page(db: Session, user_id: UUID, page_index: int) -> BinderPage:
@@ -160,12 +196,49 @@ def create_owned_card(
         language=payload.language,
         is_holo=payload.holo_type == "holo",
         is_reverse_holo=payload.holo_type == "reverse_holo",
+        image_url=payload.image_url,
         notes=payload.notes,
     )
     db.add(card)
+    db.flush()
+    _place_card_in_next_slot(db, current_user.id, card.id)
     db.commit()
     db.refresh(card)
     return _card_response(card)
+
+
+@router.patch("/cards/{card_id}", response_model=OwnedCardResponse)
+def update_owned_card(
+    card_id: UUID,
+    payload: OwnedCardUpdate,
+    current_user: CurrentUser,
+    db: DbSession,
+) -> OwnedCardResponse:
+    card = _get_owned_card(db, current_user.id, card_id)
+    updates = payload.model_dump(exclude_unset=True)
+
+    if "holo_type" in updates:
+        holo_type = updates.pop("holo_type")
+        card.is_holo = holo_type == "holo"
+        card.is_reverse_holo = holo_type == "reverse_holo"
+
+    for field, value in updates.items():
+        setattr(card, field, value)
+
+    db.commit()
+    db.refresh(card)
+    return _card_response(card)
+
+
+@router.delete("/cards/{card_id}", status_code=status.HTTP_204_NO_CONTENT)
+def delete_owned_card(
+    card_id: UUID,
+    current_user: CurrentUser,
+    db: DbSession,
+) -> None:
+    card = _get_owned_card(db, current_user.id, card_id)
+    db.delete(card)
+    db.commit()
 
 
 @router.put("/pages/{page_index}/slots/{slot_index}", response_model=BinderResponse)
