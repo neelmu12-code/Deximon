@@ -16,6 +16,7 @@ class OwnedCardCreate(BaseModel):
     condition: str | None = Field(default=None, max_length=20)
     language: str | None = Field(default=None, max_length=10)
     holo_type: HoloType = "normal"
+    image_url: str | None = Field(default=None, max_length=500)
     notes: str | None = Field(default=None, max_length=500)
 
 
@@ -30,8 +31,16 @@ class OwnedCardResponse(BaseModel):
     condition: str | None
     language: str | None
     holo_type: HoloType
+    image_url: str | None
     notes: str | None
     created_at: datetime
+
+
+class OwnedCardUpdate(BaseModel):
+    condition: str | None = Field(default=None, max_length=20)
+    language: str | None = Field(default=None, max_length=10)
+    holo_type: HoloType | None = None
+    notes: str | None = Field(default=None, max_length=500)
 
 
 class BinderSlotSetRequest(BaseModel):

@@ -27,6 +27,7 @@ class Card(Base):
     language: Mapped[str | None] = mapped_column(String(10), nullable=True)
     is_holo: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
     is_reverse_holo: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    image_url: Mapped[str | None] = mapped_column(String(500), nullable=True)
     notes: Mapped[str | None] = mapped_column(String(500), nullable=True)
 
     created_at: Mapped[datetime] = mapped_column(
