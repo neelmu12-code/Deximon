@@ -8,8 +8,10 @@ import { ApiError, fetchAPI } from "@/lib/fetchAPI";
 // The binder is currently localStorage-backed, so a binder card has no row in the
 // `cards` table yet. To create a real listing we first persist the card via
 // POST /binder/cards (Collection backend), then POST /market/listings with the
-// returned owned-card id. Once the binder is wired to the backend, the create-card
-// step here can be dropped in favour of the existing owned-card id.
+// returned owned-card id. We pass place_in_binder: false so this listing-only card
+// does not get auto-placed into a backend binder slot the localStorage binder can't
+// see. Once the binder is wired to the backend, the create-card step here can be
+// dropped in favour of the existing owned-card id.
 type OwnedCard = { id: string };
 type CreatedListing = { id: string };
 
@@ -44,6 +46,7 @@ export function ListCardModal({ card, onClose, onListed }: Props) {
           number: card.num || null,
           rarity: card.rarity || null,
           holo_type: "normal",
+          place_in_binder: false,
         },
       });
       if (!owned) throw new Error("Card could not be saved.");
