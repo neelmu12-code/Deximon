@@ -28,6 +28,7 @@ def search_cards(
             )
         )
         .order_by(
+            # Exact-prefix matches first, then everything else alphabetically
             sa.case((TcgCard.name.ilike(f"{q}%"), 0), else_=1),
             TcgCard.name,
         )

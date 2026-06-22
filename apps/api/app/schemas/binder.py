@@ -18,6 +18,10 @@ class OwnedCardCreate(BaseModel):
     holo_type: HoloType = "normal"
     image_url: str | None = Field(default=None, max_length=500)
     notes: str | None = Field(default=None, max_length=500)
+    # When false, the card is persisted without being auto-placed into a binder
+    # slot. The "list from binder" flow uses this: it creates a card only to back
+    # a marketplace listing and does not want a phantom slot in the owner's binder.
+    place_in_binder: bool = True
 
 
 class OwnedCardResponse(BaseModel):
@@ -37,6 +41,9 @@ class OwnedCardResponse(BaseModel):
 
 
 class OwnedCardUpdate(BaseModel):
+    # Only the fields a user can sensibly edit after a card is in their binder.
+    # Identity fields (name, set_code, number, rarity, card_type, image_url) come
+    # from the TCG catalog at creation time and are intentionally not editable here.
     condition: str | None = Field(default=None, max_length=20)
     language: str | None = Field(default=None, max_length=10)
     holo_type: HoloType | None = None

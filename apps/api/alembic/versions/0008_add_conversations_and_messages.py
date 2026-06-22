@@ -10,7 +10,7 @@ import sqlalchemy as sa
 from alembic import op
 from sqlalchemy.dialects.postgresql import UUID
 
-revision = "0008"
+revision = "0008_add_conversations_and_messages"
 down_revision = "0007_card_image_url"
 branch_labels = None
 depends_on = None
