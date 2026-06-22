@@ -6,8 +6,6 @@ Create Date: 2026-06-22 01:31:17.940053
 """
 from __future__ import annotations
 
-from collections.abc import Sequence
-
 import sqlalchemy as sa
 from alembic import op
 from sqlalchemy.dialects.postgresql import UUID
