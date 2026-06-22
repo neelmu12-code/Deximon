@@ -3,6 +3,7 @@
 import { useState, useCallback, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { useAuth } from "@/lib/auth";
+import { fetchAPI } from "@/lib/fetchAPI";
 import type { CardSlot, BinderCoverConfig } from "@/lib/binderTypes";
 import { DEFAULT_COVER } from "@/lib/binderTypes";
 import { BinderSpread } from "@/components/binder/BinderSpread";
@@ -16,6 +17,32 @@ const STORAGE_KEYS = {
   cover: "deximon_binder_cover",
 } as const;
 
+const PLACEHOLDER_CARD_IMAGE =
+  "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 250 350'%3E%3Crect width='250' height='350' rx='18' fill='%23201916'/%3E%3Crect x='18' y='18' width='214' height='314' rx='14' fill='none' stroke='%23715a32' stroke-width='4' stroke-dasharray='12 10'/%3E%3Ctext x='125' y='178' text-anchor='middle' fill='%23b99a52' font-family='Arial' font-size='20'%3EDeximon%3C/text%3E%3C/svg%3E";
+
+type BackendOwnedCard = {
+  id: string;
+  name: string;
+  set_code: string | null;
+  number: string | null;
+  rarity: string | null;
+  image_url: string | null;
+};
+
+type BackendBinderSlot = {
+  slot_index: number;
+  card: BackendOwnedCard | null;
+};
+
+type BackendBinderPage = {
+  page_index: number;
+  slots: BackendBinderSlot[];
+};
+
+type BackendBinderResponse = {
+  pages: BackendBinderPage[];
+};
+
 function loadFromStorage<T>(key: string, fallback: T): T {
   if (typeof window === "undefined") return fallback;
   try {
@@ -24,6 +51,36 @@ function loadFromStorage<T>(key: string, fallback: T): T {
   } catch {
     return fallback;
   }
+}
+
+function imageForCard(card: BackendOwnedCard): string {
+  if (card.image_url) return card.image_url;
+  if (card.set_code && card.number) {
+    const cardNumber = card.number.split("/")[0];
+    return `https://images.pokemontcg.io/${card.set_code}/${cardNumber}.png`;
+  }
+  return PLACEHOLDER_CARD_IMAGE;
+}
+
+function mapBackendBinder(binder: BackendBinderResponse): CardSlot[][] {
+  const orderedPages = [...binder.pages].sort((a, b) => a.page_index - b.page_index);
+  if (orderedPages.length === 0) return [[...Array(9)].map(() => null) as CardSlot[]];
+
+  return orderedPages.map((page) => {
+    const slots = [...Array(9)].map(() => null) as CardSlot[];
+    for (const slot of page.slots) {
+      if (!slot.card || slot.slot_index < 0 || slot.slot_index > 8) continue;
+      slots[slot.slot_index] = {
+        id: slot.card.id,
+        name: slot.card.name,
+        set: slot.card.set_code ?? "",
+        num: slot.card.number ?? "",
+        rarity: slot.card.rarity ?? "",
+        image: imageForCard(slot.card),
+      };
+    }
+    return slots;
+  });
 }
 
 export default function BinderPage() {
@@ -38,6 +95,19 @@ export default function BinderPage() {
   useEffect(() => {
     setPages(loadFromStorage(STORAGE_KEYS.pages, [[...Array(9)].map(() => null) as CardSlot[]]));
     setCover(loadFromStorage(STORAGE_KEYS.cover, DEFAULT_COVER));
+
+    let cancelled = false;
+    fetchAPI<BackendBinderResponse>("/binder/me")
+      .then((binder) => {
+        if (!binder || cancelled) return;
+        setPages(mapBackendBinder(binder));
+      })
+      .catch(() => {
+        // Keep the localStorage fallback if the user is offline or not authenticated.
+      });
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
   const [showCoverEditor, setShowCoverEditor] = useState(false);

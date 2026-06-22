@@ -7,8 +7,10 @@ import { ApiError, fetchAPI } from "@/lib/fetchAPI";
 type HoloType = "normal" | "holo" | "reverse_holo";
 
 type ScanCandidate = {
+  id?: string;
   name: string;
   set_name: string;
+  set_code?: string | null;
   number: string;
   rarity: string;
   image_url?: string | null;
@@ -21,6 +23,18 @@ type ConfirmedCard = ScanCandidate & {
   language: string;
 };
 
+type OwnedCard = {
+  id: string;
+  name: string;
+  set_code: string | null;
+  number: string | null;
+  rarity: string | null;
+  condition: string | null;
+  language: string | null;
+  holo_type: HoloType;
+  image_url: string | null;
+};
+
 const ALLOWED_TYPES = new Set(["image/jpeg", "image/png", "image/webp"]);
 const ALLOWED_EXTENSIONS = [".jpg", ".jpeg", ".png", ".webp"];
 
@@ -28,6 +42,7 @@ const MOCK_CANDIDATES: ScanCandidate[] = [
   {
     name: "Pikachu",
     set_name: "Base Set",
+    set_code: "base1",
     number: "58/102",
     rarity: "Common",
     image_url: "https://images.pokemontcg.io/base1/58.png",
@@ -36,6 +51,7 @@ const MOCK_CANDIDATES: ScanCandidate[] = [
   {
     name: "Charizard",
     set_name: "Base Set",
+    set_code: "base1",
     number: "4/102",
     rarity: "Rare Holo",
     image_url: "https://images.pokemontcg.io/base1/4.png",
@@ -44,6 +60,7 @@ const MOCK_CANDIDATES: ScanCandidate[] = [
   {
     name: "Mewtwo",
     set_name: "Base Set",
+    set_code: "base1",
     number: "10/102",
     rarity: "Rare Holo",
     image_url: "https://images.pokemontcg.io/base1/10.png",
@@ -87,6 +104,7 @@ function normalizeCandidate(payload: unknown): ScanCandidate {
   return {
     name: String(data.name),
     set_name: String(data.set_name),
+    set_code: data.set_code ? String(data.set_code) : null,
     number: String(data.number),
     rarity: String(data.rarity),
     image_url: data.image_url ? String(data.image_url) : null,
@@ -182,11 +200,23 @@ export function ScannerUploadFlow() {
     setSuccess(null);
 
     try {
-      // TODO(scanner-binder-api): replace this local fallback with the real
-      // authenticated binder/card create endpoint once the collection API ships.
-      await new Promise((resolve) => setTimeout(resolve, 250));
+      const saved = await fetchAPI<OwnedCard>("/binder/cards", {
+        method: "POST",
+        body: {
+          name: form.name,
+          set_code: form.set_code || form.set_name || null,
+          number: form.number,
+          rarity: form.rarity,
+          condition: form.condition,
+          language: form.language,
+          holo_type: form.holo_type,
+          image_url: form.image_url ?? null,
+          notes: `Saved from scanner candidate with ${Math.round(form.confidence * 100)}% confidence.`,
+        },
+      });
+      if (!saved) throw new Error("Binder did not return the saved card.");
       setSavedCards((cards) => [form, ...cards]);
-      setSuccess("Card saved locally for this session. Binder API integration is still pending.");
+      setSuccess("Card saved to your binder.");
     } catch (saveError) {
       setError(messageFromError(saveError));
     } finally {
@@ -322,7 +352,7 @@ export function ScannerUploadFlow() {
             <div>
               <h2 className="text-lg font-semibold text-ink">Confirm card details</h2>
               <p className="text-sm text-ink2">
-                Edit anything the mock scanner got wrong, then save it to the binder flow.
+                Edit anything the scanner got wrong, then save it to your binder.
               </p>
             </div>
 
@@ -365,10 +395,6 @@ export function ScannerUploadFlow() {
                 <span className="block text-[11px] uppercase tracking-wider text-ink3 mb-1.5">Language</span>
                 <input value={form.language} onChange={(e) => setForm({ ...form, language: e.target.value.toUpperCase() })} maxLength={10} required className="h-10 w-full rounded-md border border-hair bg-surface2 px-3 text-sm text-ink outline-none focus:border-ink2" />
               </label>
-            </div>
-
-            <div className="rounded-md border border-hair bg-surface2 px-3 py-2 text-[12px] text-ink3">
-              TODO: replace temporary local save with the real authenticated binder/card endpoint once it exists.
             </div>
 
             <button

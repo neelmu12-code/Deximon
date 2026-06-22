@@ -1,6 +1,6 @@
-"""0008_add_conversations_and_messages
+"""0008_chat_messages
 
-Revision ID: 0008_add_conversations_and_messages
+Revision ID: 0008_chat_messages
 Revises: 0007_card_image_url
 Create Date: 2026-06-22 01:31:17.940053
 """
@@ -10,35 +10,43 @@ import sqlalchemy as sa
 from alembic import op
 from sqlalchemy.dialects.postgresql import UUID
 
-revision = "0008_add_conversations_and_messages"
+revision = "0008_chat_messages"
 down_revision = "0007_card_image_url"
 branch_labels = None
 depends_on = None
 
 
 def upgrade() -> None:
-    op.create_table(
-        "conversations",
-        sa.Column("id", UUID(as_uuid=True), primary_key=True),
-        sa.Column("listing_id", UUID(as_uuid=True), sa.ForeignKey("listings.id", ondelete="CASCADE"), nullable=False),
-        sa.Column("requester_id", UUID(as_uuid=True), sa.ForeignKey("users.id", ondelete="CASCADE"), nullable=False),
-        sa.Column("created_at", sa.DateTime(timezone=True), server_default=sa.func.now(), nullable=False),
-        sa.UniqueConstraint("listing_id", "requester_id", name="uq_conversations_listing_requester"),
-    )
-    op.create_index("ix_conversations_listing_id", "conversations", ["listing_id"])
+    inspector = sa.inspect(op.get_bind())
+    tables = set(inspector.get_table_names())
 
-    op.create_table(
-        "messages",
-        sa.Column("id", UUID(as_uuid=True), primary_key=True),
-        sa.Column("conversation_id", UUID(as_uuid=True), sa.ForeignKey("conversations.id", ondelete="CASCADE"), nullable=False),
-        sa.Column("sender_id", UUID(as_uuid=True), sa.ForeignKey("users.id", ondelete="CASCADE"), nullable=False),
-        sa.Column("body", sa.String(2000), nullable=False),
-        sa.Column("created_at", sa.DateTime(timezone=True), server_default=sa.func.now(), nullable=False),
-    )
-    op.create_index("ix_messages_conversation_id", "messages", ["conversation_id"])
-    op.create_index("ix_messages_created_at", "messages", ["created_at"])
+    # These tables are part of 0001_initial in the current project history. This
+    # migration is kept idempotent for dev databases that already have them.
+    if "conversations" not in tables:
+        op.create_table(
+            "conversations",
+            sa.Column("id", UUID(as_uuid=True), primary_key=True),
+            sa.Column("listing_id", UUID(as_uuid=True), sa.ForeignKey("listings.id", ondelete="CASCADE"), nullable=False),
+            sa.Column("requester_id", UUID(as_uuid=True), sa.ForeignKey("users.id", ondelete="CASCADE"), nullable=False),
+            sa.Column("created_at", sa.DateTime(timezone=True), server_default=sa.func.now(), nullable=False),
+            sa.UniqueConstraint("listing_id", "requester_id", name="uq_conversations_listing_requester"),
+        )
+        op.create_index("ix_conversations_listing_id", "conversations", ["listing_id"])
+
+    if "messages" not in tables:
+        op.create_table(
+            "messages",
+            sa.Column("id", UUID(as_uuid=True), primary_key=True),
+            sa.Column("conversation_id", UUID(as_uuid=True), sa.ForeignKey("conversations.id", ondelete="CASCADE"), nullable=False),
+            sa.Column("sender_id", UUID(as_uuid=True), sa.ForeignKey("users.id", ondelete="CASCADE"), nullable=False),
+            sa.Column("body", sa.String(2000), nullable=False),
+            sa.Column("created_at", sa.DateTime(timezone=True), server_default=sa.func.now(), nullable=False),
+        )
+        op.create_index("ix_messages_conversation_id", "messages", ["conversation_id"])
+        op.create_index("ix_messages_created_at", "messages", ["created_at"])
 
 
 def downgrade() -> None:
-    op.drop_table("messages")
-    op.drop_table("conversations")
+    # Conversations/messages are owned by 0001_initial in the current schema.
+    # Downgrading this compatibility migration should not drop initial tables.
+    pass

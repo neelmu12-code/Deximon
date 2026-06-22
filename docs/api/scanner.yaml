@@ -1,11 +1,13 @@
 openapi: 3.1.0
 info:
-  title: Deximon — Card Recognition Scanner API
-  version: 0.0.1
-  description: Service 4 (S4). Standalone microservice. Image preprocess → AWS Rekognition → TCG-API match.
+  title: Deximon - Card Recognition Scanner API
+  version: 0.1.0
+  description: Service 4 scanner contract. The scanner microservice runs on port 8001, and the main API exposes browser-safe proxy routes on port 8000 at the same /scan/mock and /scan paths.
 servers:
   - url: http://localhost:8001
-    description: Local
+    description: Local scanner service
+  - url: http://localhost:8000
+    description: Local main API scanner proxy
 paths:
   /healthz:
     get:
@@ -13,18 +15,12 @@ paths:
       responses:
         "200":
           description: OK
-          content:
-            application/json:
-              schema: { type: object, properties: { status: { type: string } } }
   /health:
     get:
       summary: Health check
       responses:
         "200":
           description: OK
-          content:
-            application/json:
-              schema: { type: object, properties: { status: { type: string } } }
   /scan/mock:
     post:
       summary: Local mock scanner
@@ -37,16 +33,23 @@ paths:
               type: object
               required: [file]
               properties:
-                file: { type: string, format: binary }
-                q: { type: string, nullable: true }
+                file:
+                  type: string
+                  format: binary
+                q:
+                  type: string
+                  nullable: true
       responses:
         "200":
           description: Candidate scan result
           content:
             application/json:
-              schema: { $ref: "#/components/schemas/ScanResponse" }
-        "400": { description: Invalid image }
-        "415": { description: Unsupported media type }
+              schema:
+                $ref: "#/components/schemas/ScanResponse"
+        "400":
+          description: Invalid image
+        "415":
+          description: Unsupported media type
   /scan:
     post:
       summary: AWS-backed scanner
@@ -59,44 +62,72 @@ paths:
               type: object
               required: [file]
               properties:
-                file: { type: string, format: binary }
+                file:
+                  type: string
+                  format: binary
       responses:
         "200":
           description: Candidate scan result
           content:
             application/json:
-              schema: { $ref: "#/components/schemas/ScanResponse" }
-        "400": { description: Invalid image }
-        "503": { description: AWS scanner not configured }
+              schema:
+                $ref: "#/components/schemas/ScanResponse"
+        "400":
+          description: Invalid image
+        "503":
+          description: AWS scanner not configured
 components:
   schemas:
     ImageInfo:
       type: object
       required: [width, height, format, mode, processed_bytes]
       properties:
-        width: { type: integer }
-        height: { type: integer }
-        format: { type: string }
-        mode: { type: string }
-        processed_bytes: { type: integer }
+        width:
+          type: integer
+        height:
+          type: integer
+        format:
+          type: string
+        mode:
+          type: string
+        processed_bytes:
+          type: integer
     ScanCandidate:
       type: object
       required: [id, name, set_name, set_code, number, confidence]
       properties:
-        id: { type: string }
-        name: { type: string }
-        set_name: { type: string }
-        set_code: { type: string }
-        number: { type: string }
-        rarity: { type: ["string", "null"] }
-        image_url: { type: ["string", "null"], format: uri }
-        confidence: { type: number, minimum: 0, maximum: 1 }
+        id:
+          type: string
+        name:
+          type: string
+        set_name:
+          type: string
+        set_code:
+          type: string
+        number:
+          type: string
+        rarity:
+          type: [string, "null"]
+        image_url:
+          type: [string, "null"]
+          format: uri
+        confidence:
+          type: number
+          minimum: 0
+          maximum: 1
     ScanResponse:
       type: object
       required: [candidate, image, source, ocr_text]
       properties:
-        candidate: { $ref: "#/components/schemas/ScanCandidate" }
-        image: { $ref: "#/components/schemas/ImageInfo" }
-        source: { type: string }
-        ocr_text: { type: array, items: { type: string } }
-        image_key: { type: ["string", "null"] }
+        candidate:
+          $ref: "#/components/schemas/ScanCandidate"
+        image:
+          $ref: "#/components/schemas/ImageInfo"
+        source:
+          type: string
+        ocr_text:
+          type: array
+          items:
+            type: string
+        image_key:
+          type: [string, "null"]
