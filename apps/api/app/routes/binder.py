@@ -63,8 +63,8 @@ def _get_owned_card(db: Session, user_id: UUID, card_id: UUID) -> Card:
 
 
 def _place_card_in_next_slot(db: Session, user_id: UUID, card_id: UUID) -> None:
-    """Find the first empty slot across all pages and place the card there.
-    If all pages are full, create a new page."""
+    """Place the card in the first empty slot across the user's pages.
+    If every page is full, start a new page."""
     pages = list(
         db.scalars(
             select(BinderPage)
@@ -75,22 +75,25 @@ def _place_card_in_next_slot(db: Session, user_id: UUID, card_id: UUID) -> None:
     if not pages:
         pages = [_get_or_create_page(db, user_id, 0)]
 
+    # Load every slot for these pages in one query rather than one query per page.
+    page_ids = [page.id for page in pages]
+    slots = list(db.scalars(select(BinderSlot).where(BinderSlot.page_id.in_(page_ids))))
+    slots_by_page: dict[UUID, dict[int, BinderSlot]] = {page.id: {} for page in pages}
+    for slot in slots:
+        slots_by_page[slot.page_id][slot.slot_index] = slot
+
     for page in pages:
-        slots = {
-            slot.slot_index: slot
-            for slot in db.scalars(
-                select(BinderSlot).where(BinderSlot.page_id == page.id)
-            )
-        }
+        page_slots = slots_by_page[page.id]
         for slot_index in range(9):
-            if slot_index not in slots:
+            existing = page_slots.get(slot_index)
+            if existing is None:
                 db.add(BinderSlot(page_id=page.id, slot_index=slot_index, card_id=card_id))
                 return
-            elif slots[slot_index].card_id is None:
-                slots[slot_index].card_id = card_id
+            if existing.card_id is None:
+                existing.card_id = card_id
                 return
 
-    # All pages are full — start a new one
+    # Every page is full — start a new one.
     next_index = pages[-1].page_index + 1
     new_page = _get_or_create_page(db, user_id, next_index)
     db.add(BinderSlot(page_id=new_page.id, slot_index=0, card_id=card_id))
@@ -201,7 +204,8 @@ def create_owned_card(
     )
     db.add(card)
     db.flush()
-    _place_card_in_next_slot(db, current_user.id, card.id)
+    if payload.place_in_binder:
+        _place_card_in_next_slot(db, current_user.id, card.id)
     db.commit()
     db.refresh(card)
     return _card_response(card)

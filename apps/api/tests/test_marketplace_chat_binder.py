@@ -245,3 +245,96 @@ def test_listing_notes_update_and_cancelled_hidden_from_default_search(client: T
     # ...but an explicit status filter can still surface them.
     explicit = client.get("/market/listings?status=cancelled")
     assert [row["id"] for row in explicit.json()] == [listing["id"]]
+
+
+def test_create_card_auto_places_into_binder_in_order(client: TestClient) -> None:
+    seller = register_user(client, "seller@example.com", "seller")
+    headers = auth_headers(seller)
+
+    first = create_card(client, headers, name="Charizard")
+    second = create_card(client, headers, name="Blastoise")
+
+    binder = client.get("/binder/me", headers=headers)
+    assert binder.status_code == 200
+    slots = binder.json()["pages"][0]["slots"]
+    assert slots[0]["card"]["id"] == first["id"]
+    assert slots[1]["card"]["id"] == second["id"]
+
+
+def test_create_card_can_skip_binder_placement(client: TestClient) -> None:
+    seller = register_user(client, "seller@example.com", "seller")
+    headers = auth_headers(seller)
+
+    response = client.post(
+        "/binder/cards",
+        headers=headers,
+        json={
+            "name": "Charizard",
+            "set_code": "base1",
+            "number": "4",
+            "image_url": "https://img.example/charizard.png",
+            "holo_type": "normal",
+            "place_in_binder": False,
+        },
+    )
+    assert response.status_code == 201
+    assert response.json()["image_url"] == "https://img.example/charizard.png"
+
+    binder = client.get("/binder/me", headers=headers)
+    assert all(slot["card"] is None for slot in binder.json()["pages"][0]["slots"])
+
+
+def test_update_owned_card_edits_mutable_fields(client: TestClient) -> None:
+    seller = register_user(client, "seller@example.com", "seller")
+    headers = auth_headers(seller)
+    card = create_card(client, headers)
+
+    updated = client.patch(
+        f"/binder/cards/{card['id']}",
+        headers=headers,
+        json={"condition": "LP", "notes": "small edge wear", "holo_type": "reverse_holo"},
+    )
+    assert updated.status_code == 200
+    body = updated.json()
+    assert body["condition"] == "LP"
+    assert body["notes"] == "small edge wear"
+    assert body["holo_type"] == "reverse_holo"
+    # Identity fields are untouched by a partial update.
+    assert body["name"] == "Charizard"
+    assert body["card_type"] == "Fire"
+
+
+def test_delete_owned_card_empties_its_binder_slot(client: TestClient) -> None:
+    seller = register_user(client, "seller@example.com", "seller")
+    headers = auth_headers(seller)
+    card = create_card(client, headers)
+
+    deleted = client.delete(f"/binder/cards/{card['id']}", headers=headers)
+    assert deleted.status_code == 204
+
+    # The card is gone from the owner's collection and its slot reads empty.
+    remaining = client.get("/binder/cards", headers=headers)
+    assert all(row["id"] != card["id"] for row in remaining.json())
+    binder = client.get("/binder/me", headers=headers)
+    assert all(slot["card"] is None for slot in binder.json()["pages"][0]["slots"])
+
+    # A second delete is a no-op 404, not a 500.
+    assert client.delete(f"/binder/cards/{card['id']}", headers=headers).status_code == 404
+
+
+def test_card_update_and_delete_scoped_to_owner(client: TestClient) -> None:
+    owner = register_user(client, "owner@example.com", "owner")
+    intruder = register_user(client, "intruder@example.com", "intruder")
+    owner_headers = auth_headers(owner)
+    intruder_headers = auth_headers(intruder)
+    card = create_card(client, owner_headers)
+
+    assert (
+        client.patch(
+            f"/binder/cards/{card['id']}", headers=intruder_headers, json={"condition": "DMG"}
+        ).status_code
+        == 404
+    )
+    assert (
+        client.delete(f"/binder/cards/{card['id']}", headers=intruder_headers).status_code == 404
+    )
