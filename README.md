@@ -49,3 +49,7 @@ Useful local scripts:
 ./scripts/dev-migrate.ps1     # start API dependencies and run Alembic
 ./scripts/dev-reset.ps1 -Force # delete Docker volumes, rebuild, migrate, seed
 ```
+
+## Status
+
+This project is under active development for EECS4314 (Winter 2026).
