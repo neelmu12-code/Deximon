@@ -37,6 +37,8 @@ class ListingSellerResponse(BaseModel):
     username: str
     display_name: str | None
     avatar_url: str | None
+    avg_rating: float | None = None
+    review_count: int = 0
 
 
 class ListingResponse(BaseModel):

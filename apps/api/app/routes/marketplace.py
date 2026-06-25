@@ -8,7 +8,9 @@ from sqlalchemy.orm import Session, selectinload
 from app.db.session import get_db
 from app.dependencies.auth import get_current_user
 from app.models.card import Card
+from app.models.chat import Conversation
 from app.models.listing import Listing, ListingStatus
+from app.models.notification import NotificationType
 from app.models.user import User
 from app.schemas.binder import HoloType
 from app.schemas.marketplace import (
@@ -18,6 +20,8 @@ from app.schemas.marketplace import (
     ListingSellerResponse,
     ListingUpdate,
 )
+from app.services.notifications import actor_meta, create_notification
+from app.services.reviews import seller_rating
 
 router = APIRouter(prefix="/market/listings", tags=["marketplace"])
 DbSession = Annotated[Session, Depends(get_db)]
@@ -59,6 +63,8 @@ def _listing_response(db: Session, listing: Listing) -> ListingResponse:
     if card is None or seller is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Listing not found")
 
+    avg_rating, review_count = seller_rating(db, seller.id)
+
     return ListingResponse(
         id=listing.id,
         card_id=listing.card_id,
@@ -84,6 +90,8 @@ def _listing_response(db: Session, listing: Listing) -> ListingResponse:
             username=seller.username,
             display_name=seller.profile.display_name if seller.profile else None,
             avatar_url=seller.profile.avatar_url if seller.profile else None,
+            avg_rating=avg_rating,
+            review_count=review_count,
         ),
     )
 
@@ -172,7 +180,7 @@ def get_listing(listing_id: UUID, db: DbSession) -> ListingResponse:
 
 
 @router.patch("/{listing_id}", response_model=ListingResponse)
-def update_listing(
+async def update_listing(
     listing_id: UUID,
     payload: ListingUpdate,
     current_user: CurrentUser,
@@ -183,6 +191,7 @@ def update_listing(
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Not your listing")
 
     updates = payload.model_dump(exclude_unset=True)
+    old_status = listing.status
     if "status" in updates and updates["status"] is not None:
         new_status = updates["status"]
         if new_status != listing.status and new_status not in _ALLOWED_STATUS_TRANSITIONS[listing.status]:
@@ -201,4 +210,23 @@ def update_listing(
 
     db.commit()
     db.refresh(listing)
+
+    if "status" in updates and updates["status"] is not None and listing.status != old_status:
+        card = db.get(Card, listing.card_id)
+        card_name = card.name if card else "a listing"
+        conversations = db.scalars(select(Conversation).where(Conversation.listing_id == listing.id))
+        for conversation in conversations:
+            await create_notification(
+                db,
+                user_id=conversation.requester_id,
+                type=NotificationType.listing_status,
+                title=current_user.username,
+                body=f"changed {card_name} to {listing.status.value.replace('_', ' ')}",
+                meta={
+                    "listing_id": str(listing.id),
+                    "status": listing.status.value,
+                    **actor_meta(current_user),
+                },
+            )
+
     return _listing_response(db, listing)

@@ -8,7 +8,18 @@ from fastapi.staticfiles import StaticFiles
 from starlette.middleware.sessions import SessionMiddleware
 
 from app.core.config import get_settings
-from app.routes import auth, binder, cards, chat, health, marketplace, profiles, scanner
+from app.routes import (
+    auth,
+    binder,
+    cards,
+    chat,
+    health,
+    marketplace,
+    notifications,
+    profiles,
+    reviews,
+    scanner,
+)
 
 settings = get_settings()
 
@@ -49,6 +60,8 @@ app.include_router(cards.router)
 app.include_router(binder.router)
 app.include_router(marketplace.router)
 app.include_router(chat.router)
+app.include_router(notifications.router)
+app.include_router(reviews.router)
 app.include_router(scanner.router)
 
 

@@ -31,6 +31,11 @@ export function apiUrl(path: string): string {
   return path.startsWith("http") ? path : `${API_BASE}${path}`;
 }
 
+export function wsUrl(path: string): string {
+  const url = apiUrl(path);
+  return url.replace(/^http/, "ws");
+}
+
 export async function fetchAPI<T = unknown>(path: string, opts: Options = {}): Promise<T | null> {
   const { body, headers, ...rest } = opts;
   const isFormData = typeof FormData !== "undefined" && body instanceof FormData;
