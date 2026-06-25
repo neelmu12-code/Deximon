@@ -16,6 +16,8 @@ class ProfileResponse(BaseModel):
     location: str | None
     twitter_handle: str | None
     instagram_handle: str | None
+    avg_rating: float | None = None
+    review_count: int = 0
 
 
 class MeResponse(ProfileResponse):

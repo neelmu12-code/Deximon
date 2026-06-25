@@ -17,6 +17,8 @@ export type ListingSeller = {
   username: string;
   display_name: string | null;
   avatar_url: string | null;
+  avg_rating?: number | null;
+  review_count?: number;
 };
 
 export type Listing = {

@@ -38,6 +38,8 @@ export type PublicProfile = {
   location: string | null;
   twitter_handle: string | null;
   instagram_handle: string | null;
+  avg_rating?: number | null;
+  review_count?: number;
 };
 
 type TokenResponse = {

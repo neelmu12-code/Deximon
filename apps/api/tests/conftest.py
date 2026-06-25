@@ -23,8 +23,10 @@ from app.models import (  # noqa: E402,F401
     Conversation,
     Listing,
     Message,
+    Notification,
     PasswordResetToken,
     Profile,
+    SellerReview,
     TcgCard,
     User,
 )

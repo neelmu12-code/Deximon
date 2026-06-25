@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import { useAuth } from "@/lib/auth";
 import { ApiError, fetchAPI } from "@/lib/fetchAPI";
+import { Stars } from "@/components/ui/Stars";
 import {
   formatPrice,
   listingStatusLabel,
@@ -123,6 +124,13 @@ export function ListingDetailClient({ id }: { id: string }) {
           <Link href={`/u/${listing.seller.username}`} className="font-medium hover:underline">
             @{listing.seller.username}
           </Link>
+          {listing.seller.review_count != null &&
+            listing.seller.review_count > 0 &&
+            listing.seller.avg_rating != null && (
+              <span className="ml-2 inline-flex align-middle">
+                <Stars rating={listing.seller.avg_rating} reviews={listing.seller.review_count} />
+              </span>
+            )}
         </p>
       </header>
 

@@ -4,7 +4,9 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { BinderPreview } from "@/components/profile/BinderPreview";
 import { EditProfileButton } from "@/components/profile/EditProfileButton";
+import { ProfileReviews } from "@/components/profile/ProfileReviews";
 import { Avatar } from "@/components/ui/Avatar";
+import { Stars } from "@/components/ui/Stars";
 import { ApiError, fetchAPI } from "@/lib/fetchAPI";
 import { avatarHue, userDisplayName } from "@/lib/userDisplay";
 import type { PublicProfile } from "@/lib/auth";
@@ -64,6 +66,11 @@ export default async function PublicProfilePage({ params }: { params: Promise<Pa
             <span className="text-ink2">@{profile.username}</span>
           </div>
           <p className="text-ink2 text-sm mt-1 max-w-xl">{profile.bio ?? "No bio yet."}</p>
+          {profile.review_count != null && profile.review_count > 0 && profile.avg_rating != null && (
+            <div className="mt-2">
+              <Stars rating={profile.avg_rating} reviews={profile.review_count} />
+            </div>
+          )}
 
           {/* location + social links */}
           <div className="flex items-center gap-4 mt-2 flex-wrap text-[13px] text-ink3">
@@ -167,6 +174,8 @@ export default async function PublicProfilePage({ params }: { params: Promise<Pa
             <div className="text-[11px] uppercase tracking-[0.22em] text-ink3 mb-3">Set progress</div>
             <p className="text-sm text-ink3 text-center py-4">No sets tracked yet.</p>
           </div>
+
+          <ProfileReviews username={username} />
         </div>
       </div>
     </div>

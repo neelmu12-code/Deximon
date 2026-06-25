@@ -12,6 +12,7 @@ from app.dependencies.auth import get_current_user
 from app.models.card import Card
 from app.models.chat import Conversation, Message
 from app.models.listing import Listing, ListingStatus
+from app.models.notification import NotificationType
 from app.models.user import User
 from app.schemas.chat import (
     ConversationCreate,
@@ -20,6 +21,7 @@ from app.schemas.chat import (
     MessageCreate,
     MessageResponse,
 )
+from app.services.notifications import actor_meta, create_notification
 
 router = APIRouter(prefix="/conversations", tags=["chat"])
 DbSession = Annotated[Session, Depends(get_db)]
@@ -64,6 +66,31 @@ def _conversation_context(
 def _require_participant(current_user: User, conversation: Conversation, listing: Listing) -> None:
     if current_user.id not in {conversation.requester_id, listing.seller_id}:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Not your conversation")
+
+
+async def _notify_message(
+    db: Session,
+    conversation: Conversation,
+    listing: Listing,
+    sender: User,
+) -> None:
+    recipient_id = (
+        listing.seller_id if sender.id == conversation.requester_id else conversation.requester_id
+    )
+    card = db.get(Card, listing.card_id)
+    card_name = card.name if card else "a listing"
+    await create_notification(
+        db,
+        user_id=recipient_id,
+        type=NotificationType.message,
+        title=sender.username,
+        body=f"sent you a message about {card_name}",
+        meta={
+            "conversation_id": str(conversation.id),
+            "listing_id": str(listing.id),
+            **actor_meta(sender),
+        },
+    )
 
 
 def _conversation_response(
@@ -192,7 +219,7 @@ def list_messages(
     response_model=MessageResponse,
     status_code=status.HTTP_201_CREATED,
 )
-def send_message(
+async def send_message(
     conversation_id: UUID,
     payload: MessageCreate,
     current_user: CurrentUser,
@@ -209,6 +236,7 @@ def send_message(
     db.add(message)
     db.commit()
     db.refresh(message)
+    await _notify_message(db, conversation, listing, current_user)
     return _message_response(db, message)
 
 
@@ -246,6 +274,7 @@ async def conversation_websocket(websocket: WebSocket, conversation_id: UUID) ->
             db.add(message)
             db.commit()
             db.refresh(message)
+            await _notify_message(db, conversation, listing, user)
             await websocket.send_json(
                 {
                     "type": "message",
