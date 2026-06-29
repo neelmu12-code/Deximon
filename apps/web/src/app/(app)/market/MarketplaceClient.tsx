@@ -3,6 +3,7 @@
 import Image from "next/image";
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
+import { ListCardModal } from "@/components/binder/ListCardModal";
 import {
   PILL,
   StatusPill,
@@ -15,8 +16,11 @@ import {
   typeTone,
   type Tone,
 } from "@/components/marketplace/chips";
+import { ListCardPicker } from "@/components/marketplace/ListCardPicker";
 import { Stars } from "@/components/ui/Stars";
 import { UserAvatar } from "@/components/ui/UserAvatar";
+import type { CardSlot } from "@/lib/binderTypes";
+import { useAuth } from "@/lib/auth";
 import { ApiError, fetchAPI } from "@/lib/fetchAPI";
 import {
   formatPrice,
@@ -237,10 +241,14 @@ function toggle(set: Set<string>, value: string): Set<string> {
 const PRICE_CAP_FALLBACK = 1000;
 
 export function MarketplaceClient() {
+  const { user } = useAuth();
   const [query, setQuery] = useState("");
   const [listings, setListings] = useState<Listing[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [refreshKey, setRefreshKey] = useState(0);
+  const [showPicker, setShowPicker] = useState(false);
+  const [cardToList, setCardToList] = useState<NonNullable<CardSlot> | null>(null);
 
   const [selectedSets, setSelectedSets] = useState<Set<string>>(new Set());
   const [selectedRarities, setSelectedRarities] = useState<Set<string>>(new Set());
@@ -270,7 +278,7 @@ export function MarketplaceClient() {
       .finally(() => setLoading(false));
 
     return () => controller.abort();
-  }, [query]);
+  }, [query, refreshKey]);
 
   const setFacets = useMemo(() => deriveFacet(listings, (c) => c.set_code), [listings]);
   const rarityFacets = useMemo(() => deriveFacet(listings, (c) => c.rarity), [listings]);
@@ -549,20 +557,35 @@ export function MarketplaceClient() {
               <h1 className="text-2xl font-bold">Marketplace</h1>
               <span className="text-[13px] text-ink3">{results.length} listings</span>
             </div>
-            <label className="flex items-center gap-2">
-              <span className="text-[11px] uppercase tracking-[0.18em] text-ink3">Sort</span>
-              <select
-                value={sort}
-                onChange={(event) => setSort(event.target.value as SortKey)}
-                className="h-9 rounded-md border border-hair bg-surface2 px-3 text-[13px] text-ink outline-none focus:border-ink3"
-              >
-                {SORT_OPTIONS.map((option) => (
-                  <option key={option.value} value={option.value}>
-                    {option.label}
-                  </option>
-                ))}
-              </select>
-            </label>
+            <div className="flex items-center gap-3">
+              {user && (
+                <button
+                  type="button"
+                  onClick={() => setShowPicker(true)}
+                  className="inline-flex h-9 items-center gap-1.5 rounded-md bg-dx-red px-4 text-[13px] font-medium text-white transition-colors hover:bg-dx-red-hover"
+                >
+                  <svg viewBox="0 0 16 16" className="h-3.5 w-3.5" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round">
+                    <line x1="8" y1="3" x2="8" y2="13" />
+                    <line x1="3" y1="8" x2="13" y2="8" />
+                  </svg>
+                  List a card
+                </button>
+              )}
+              <label className="flex items-center gap-2">
+                <span className="text-[11px] uppercase tracking-[0.18em] text-ink3">Sort</span>
+                <select
+                  value={sort}
+                  onChange={(event) => setSort(event.target.value as SortKey)}
+                  className="h-9 rounded-md border border-hair bg-surface2 px-3 text-[13px] text-ink outline-none focus:border-ink3"
+                >
+                  {SORT_OPTIONS.map((option) => (
+                    <option key={option.value} value={option.value}>
+                      {option.label}
+                    </option>
+                  ))}
+                </select>
+              </label>
+            </div>
           </div>
 
           {/* Active-filter bar */}
@@ -671,6 +694,24 @@ export function MarketplaceClient() {
           )}
         </main>
       </div>
+
+      {showPicker && (
+        <ListCardPicker
+          onClose={() => setShowPicker(false)}
+          onPick={(card) => {
+            setShowPicker(false);
+            setCardToList(card);
+          }}
+        />
+      )}
+
+      {cardToList && (
+        <ListCardModal
+          card={cardToList}
+          onClose={() => setCardToList(null)}
+          onListed={() => setRefreshKey((key) => key + 1)}
+        />
+      )}
     </div>
   );
 }
