@@ -95,7 +95,7 @@ async def notifications_websocket(websocket: WebSocket) -> None:
             return
 
         await websocket.accept()
-        notification_service.hub[user_id] = websocket
+        notification_service.register(user_id, websocket)
         await websocket.send_json(
             {"type": "ready", "unread_count": notification_service.unread_count(db, user_id)}
         )
@@ -113,5 +113,5 @@ async def notifications_websocket(websocket: WebSocket) -> None:
     except WebSocketDisconnect:
         return
     finally:
-        notification_service.hub.pop(user_id, None)
+        notification_service.unregister(user_id, websocket)
         db.close()

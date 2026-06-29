@@ -21,7 +21,7 @@ from app.schemas.marketplace import (
     ListingUpdate,
 )
 from app.services.notifications import actor_meta, create_notification
-from app.services.reviews import seller_rating
+from app.services.reviews import seller_rating, seller_ratings
 
 router = APIRouter(prefix="/market/listings", tags=["marketplace"])
 DbSession = Annotated[Session, Depends(get_db)]
@@ -55,7 +55,11 @@ def _price_to_float(value: float | None) -> float | None:
     return None if value is None else float(value)
 
 
-def _listing_response(db: Session, listing: Listing) -> ListingResponse:
+def _listing_response(
+    db: Session,
+    listing: Listing,
+    ratings: dict[UUID, tuple[float | None, int]] | None = None,
+) -> ListingResponse:
     card = db.get(Card, listing.card_id)
     seller = db.scalar(
         select(User).options(selectinload(User.profile)).where(User.id == listing.seller_id)
@@ -63,7 +67,12 @@ def _listing_response(db: Session, listing: Listing) -> ListingResponse:
     if card is None or seller is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Listing not found")
 
-    avg_rating, review_count = seller_rating(db, seller.id)
+    # On list endpoints the caller passes a prefetched ratings map so we don't
+    # run an avg+count query per listing; single-listing callers leave it None.
+    if ratings is not None:
+        avg_rating, review_count = ratings.get(seller.id, (None, 0))
+    else:
+        avg_rating, review_count = seller_rating(db, seller.id)
 
     return ListingResponse(
         id=listing.id,
@@ -140,8 +149,9 @@ def list_listings(
     if condition:
         stmt = stmt.where(Card.condition.ilike(condition))
 
-    listings = db.scalars(stmt.order_by(Listing.created_at.desc()).offset(offset).limit(limit))
-    return [_listing_response(db, listing) for listing in listings]
+    listings = list(db.scalars(stmt.order_by(Listing.created_at.desc()).offset(offset).limit(limit)))
+    ratings = seller_ratings(db, {listing.seller_id for listing in listings})
+    return [_listing_response(db, listing, ratings) for listing in listings]
 
 
 @router.post("", response_model=ListingResponse, status_code=status.HTTP_201_CREATED)

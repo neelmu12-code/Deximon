@@ -1,13 +1,34 @@
-from uuid import UUID
+from uuid import UUID, uuid4
 
+import pytest
 from fastapi.testclient import TestClient
+from starlette.websockets import WebSocketDisconnect
 
+from app.services import notifications as notification_service
 from tests.test_marketplace_chat_binder import (
     auth_headers,
     create_card,
     create_listing,
     register_user,
 )
+
+
+class _FakeSocket:
+    """Stand-in for a Starlette WebSocket in hub unit tests.
+
+    The notifications WS route uses SessionLocal directly, so a full round-trip
+    can't be driven through the test client's overridden DB. These fakes let us
+    exercise the hub fan-out and dead-socket handling without a live socket.
+    """
+
+    def __init__(self, *, fail: bool = False) -> None:
+        self.fail = fail
+        self.sent: list[dict[str, object]] = []
+
+    async def send_json(self, data: dict[str, object]) -> None:
+        if self.fail:
+            raise RuntimeError("socket closed")
+        self.sent.append(data)
 
 
 def test_notifications_require_auth(client: TestClient) -> None:
@@ -184,3 +205,48 @@ def test_listing_status_change_notifies_requester(client: TestClient) -> None:
     assert payload["unread_count"] == 1
     assert payload["notifications"][0]["type"] == "listing_status"
     assert "on hold" in payload["notifications"][0]["body"].lower()
+
+
+def test_notifications_ws_requires_token(client: TestClient) -> None:
+    # No token and no auth cookie -> the route closes with a policy violation
+    # before accepting, which the test client surfaces as a disconnect.
+    with pytest.raises(WebSocketDisconnect), client.websocket_connect("/notifications/ws"):
+        pass
+
+
+async def test_push_fans_out_to_all_user_sockets() -> None:
+    user_id = uuid4()
+    tab_one = _FakeSocket()
+    tab_two = _FakeSocket()
+    notification_service.register(user_id, tab_one)  # type: ignore[arg-type]
+    notification_service.register(user_id, tab_two)  # type: ignore[arg-type]
+    try:
+        await notification_service.push(user_id, {"type": "ping"})
+        assert tab_one.sent == [{"type": "ping"}]
+        assert tab_two.sent == [{"type": "ping"}]
+    finally:
+        notification_service.unregister(user_id, tab_one)  # type: ignore[arg-type]
+        notification_service.unregister(user_id, tab_two)  # type: ignore[arg-type]
+
+
+async def test_push_drops_dead_sockets() -> None:
+    user_id = uuid4()
+    live = _FakeSocket()
+    dead = _FakeSocket(fail=True)
+    notification_service.register(user_id, live)  # type: ignore[arg-type]
+    notification_service.register(user_id, dead)  # type: ignore[arg-type]
+    try:
+        await notification_service.push(user_id, {"type": "ping"})
+        assert live.sent == [{"type": "ping"}]
+        assert dead not in notification_service.hub.get(user_id, set())
+        assert live in notification_service.hub.get(user_id, set())
+    finally:
+        notification_service.unregister(user_id, live)  # type: ignore[arg-type]
+
+
+def test_unregister_clears_empty_user_entry() -> None:
+    user_id = uuid4()
+    socket = _FakeSocket()
+    notification_service.register(user_id, socket)  # type: ignore[arg-type]
+    notification_service.unregister(user_id, socket)  # type: ignore[arg-type]
+    assert user_id not in notification_service.hub
