@@ -26,14 +26,16 @@ def list_notifications(
     skip: Annotated[int, Query(ge=0)] = 0,
     limit: Annotated[int, Query(ge=1, le=50)] = 20,
 ) -> NotificationListResponse:
-    notifications = db.scalars(
-        select(Notification)
-        .where(Notification.user_id == current_user.id)
-        .order_by(Notification.created_at.desc())
-        .offset(skip)
-        .limit(limit)
+    notifications = list(
+        db.scalars(
+            select(Notification)
+            .where(Notification.user_id == current_user.id)
+            .order_by(Notification.created_at.desc())
+            .offset(skip)
+            .limit(limit)
+        )
     )
-    items = [notification_service.to_response(n, db) for n in notifications]
+    items = notification_service.to_responses(db, notifications)
     return NotificationListResponse(
         notifications=items,
         unread_count=notification_service.unread_count(db, current_user.id),

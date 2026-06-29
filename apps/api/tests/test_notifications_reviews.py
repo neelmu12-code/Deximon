@@ -250,3 +250,45 @@ def test_unregister_clears_empty_user_entry() -> None:
     notification_service.register(user_id, socket)  # type: ignore[arg-type]
     notification_service.unregister(user_id, socket)  # type: ignore[arg-type]
     assert user_id not in notification_service.hub
+
+
+def test_notifications_list_resolves_actors_in_one_lookup(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    seller = register_user(client, "seller@example.com", "seller")
+    seller_headers = auth_headers(seller)
+    card = create_card(client, seller_headers)
+    listing = create_listing(client, seller_headers, str(card["id"]))
+
+    # Three different buyers message the seller -> three notifications whose
+    # stored meta has no avatar, so each one needs an actor lookup to enrich.
+    for name in ("ann", "bob", "cat"):
+        buyer_headers = auth_headers(register_user(client, f"{name}@example.com", name))
+        conversation = client.post(
+            "/conversations", headers=buyer_headers, json={"listing_id": listing["id"]}
+        )
+        conversation_id = conversation.json()["id"]
+        client.post(
+            f"/conversations/{conversation_id}/messages",
+            headers=buyer_headers,
+            json={"body": "Still available?"},
+        )
+
+    calls = 0
+    original = notification_service._load_actors
+
+    def counting_load_actors(db: object, usernames: set[str]) -> dict[str, object]:
+        nonlocal calls
+        calls += 1
+        return original(db, usernames)  # type: ignore[arg-type]
+
+    monkeypatch.setattr(notification_service, "_load_actors", counting_load_actors)
+
+    response = client.get("/notifications?limit=10", headers=seller_headers)
+    assert response.status_code == 200
+    payload = response.json()
+    assert len(payload["notifications"]) == 3
+    # The whole page resolves through a single batched lookup, not one per row.
+    assert calls == 1
+    actors = {n["title"]: n["meta"].get("actor_display_name") for n in payload["notifications"]}
+    assert actors == {"ann": "Ann", "bob": "Bob", "cat": "Cat"}
