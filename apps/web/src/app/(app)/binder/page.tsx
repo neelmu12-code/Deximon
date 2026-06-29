@@ -39,6 +39,19 @@ type BackendBinderSlot = {
   card: BackendOwnedCard | null;
 };
 
+type BackendListing = {
+  id: string;
+  card_id: string;
+  asking_price: number | null;
+  status: "available" | "on_hold" | "sold" | "cancelled";
+};
+
+function listedStatusLabel(status: string): "Available" | "On Hold" | "Sold" {
+  if (status === "on_hold") return "On Hold";
+  if (status === "sold") return "Sold";
+  return "Available";
+}
+
 type BackendBinderPage = {
   page_index: number;
   slots: BackendBinderSlot[];
@@ -129,9 +142,31 @@ export default function BinderPage() {
 
     let cancelled = false;
     fetchAPI<BackendBinderResponse>("/binder/me")
-      .then((binder) => {
+      .then(async (binder) => {
         if (!binder || cancelled) return;
-        setPages(mapBackendBinder(binder));
+        const mapped = mapBackendBinder(binder);
+        try {
+          const listings = await fetchAPI<BackendListing[]>("/market/listings?limit=50");
+          if (listings && !cancelled) {
+            const byCard = new Map<string, NonNullable<CardSlot>["listed"]>();
+            for (const listing of listings) {
+              byCard.set(listing.card_id, {
+                listingId: listing.id,
+                price: listing.asking_price ?? 0,
+                status: listedStatusLabel(listing.status),
+              });
+            }
+            for (const page of mapped) {
+              for (let i = 0; i < page.length; i++) {
+                const slot = page[i];
+                if (slot && byCard.has(slot.id)) page[i] = { ...slot, listed: byCard.get(slot.id) };
+              }
+            }
+          }
+        } catch {
+          // Listed badges are best-effort; the binder still renders without them.
+        }
+        if (!cancelled) setPages(mapped);
       })
       .catch(() => {
         // Keep the localStorage fallback if the user is offline or not authenticated.
