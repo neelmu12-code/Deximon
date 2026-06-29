@@ -8,7 +8,33 @@ from app.models.notification import Notification, NotificationType
 from app.models.user import User
 from app.schemas.notification import NotificationResponse
 
-hub: dict[UUID, WebSocket] = {}
+# A user can have several live sockets at once (one per open tab), so we keep a
+# set per user rather than a single socket that later tabs would overwrite.
+hub: dict[UUID, set[WebSocket]] = {}
+
+
+def register(user_id: UUID, websocket: WebSocket) -> None:
+    hub.setdefault(user_id, set()).add(websocket)
+
+
+def unregister(user_id: UUID, websocket: WebSocket) -> None:
+    sockets = hub.get(user_id)
+    if sockets is None:
+        return
+    sockets.discard(websocket)
+    if not sockets:
+        hub.pop(user_id, None)
+
+
+async def push(user_id: UUID, message: dict[str, object]) -> None:
+    # Fan out to every live socket for the user. A socket that errors on send is
+    # a client that vanished without a clean close, so drop it here instead of
+    # letting the failure bubble into the request that triggered the push.
+    for websocket in list(hub.get(user_id, set())):
+        try:
+            await websocket.send_json(message)
+        except Exception:
+            unregister(user_id, websocket)
 
 
 def actor_meta(user: User) -> dict[str, str]:
@@ -89,19 +115,12 @@ async def create_notification(
     db.commit()
     db.refresh(notification)
 
-    ws = hub.get(user_id)
-    if ws is not None:
-        message = {
+    await push(
+        user_id,
+        {
             "type": "notification",
             "notification": to_response(notification, db).model_dump(mode="json"),
             "unread_count": unread_count(db, user_id),
-        }
-        try:
-            await ws.send_json(message)
-        except Exception:
-            # The client vanished without a clean close, so the socket is stale.
-            # Drop it instead of letting the send error bubble up into the request
-            # that triggered this notification (e.g. POST /conversations/{id}/messages
-            # would 500 just because the recipient's tab had gone away).
-            hub.pop(user_id, None)
+        },
+    )
     return notification
