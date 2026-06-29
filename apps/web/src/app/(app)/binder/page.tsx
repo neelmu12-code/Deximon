@@ -9,8 +9,10 @@ import { DEFAULT_COVER } from "@/lib/binderTypes";
 import { BinderSpread } from "@/components/binder/BinderSpread";
 import { CoverEditorPanel } from "@/components/binder/CoverEditorPanel";
 import { ManualAddModal } from "@/components/binder/ManualAddModal";
+import { ConfirmCardModal } from "@/components/binder/ConfirmCardModal";
 import { CardDetailPanel } from "@/components/binder/CardDetailPanel";
 import { CoverThumb } from "@/components/binder/CoverThumb";
+import { defaultDetails, type CardDetails, type SearchCard } from "@/lib/cardDetails";
 
 const STORAGE_KEYS = {
   pages: "deximon_binder_pages",
@@ -83,6 +85,29 @@ function mapBackendBinder(binder: BackendBinderResponse): CardSlot[][] {
   });
 }
 
+type SlotTarget = { pageIdx: number; slotIdx: number };
+
+function firstEmptySlot(pages: CardSlot[][]): SlotTarget {
+  for (let pageIdx = 0; pageIdx < pages.length; pageIdx++) {
+    for (let slotIdx = 0; slotIdx < 9; slotIdx++) {
+      if (!pages[pageIdx][slotIdx]) return { pageIdx, slotIdx };
+    }
+  }
+  return { pageIdx: pages.length, slotIdx: 0 };
+}
+
+function placeCardAt(
+  pages: CardSlot[][],
+  target: SlotTarget,
+  card: NonNullable<CardSlot>,
+): CardSlot[][] {
+  const next = pages.map((page) => [...page]);
+  while (next.length <= target.pageIdx) next.push([...Array(9)].map(() => null) as CardSlot[]);
+  while (next[target.pageIdx].length < 9) next[target.pageIdx].push(null);
+  next[target.pageIdx][target.slotIdx] = card;
+  return next;
+}
+
 export default function BinderPage() {
   const router = useRouter();
   const { user } = useAuth();
@@ -112,7 +137,10 @@ export default function BinderPage() {
 
   const [showCoverEditor, setShowCoverEditor] = useState(false);
   const [showManualAdd, setShowManualAdd] = useState(false);
-  const [addTarget, setAddTarget] = useState<{ pageIdx: number; slotIdx: number } | null>(null);
+  const [addTarget, setAddTarget] = useState<SlotTarget | null>(null);
+  const [pendingCard, setPendingCard] = useState<SearchCard | null>(null);
+  const [confirmSaving, setConfirmSaving] = useState(false);
+  const [confirmError, setConfirmError] = useState<string | null>(null);
   const [detailCard, setDetailCard] = useState<NonNullable<CardSlot> | null>(null);
   const [saved, setSaved] = useState(false);
 
@@ -146,34 +174,59 @@ export default function BinderPage() {
     setDetailCard((current) => (current ? { ...current, listed } : current));
   }
 
-  function handlePick(card: NonNullable<CardSlot>) {
-    setPages((prev) => {
-      const next = prev.map((p) => [...p]);
-      if (addTarget) {
-        while (next.length <= addTarget.pageIdx) {
-          next.push([...Array(9)].map(() => null) as CardSlot[]);
-        }
-        while (next[addTarget.pageIdx].length < 9) next[addTarget.pageIdx].push(null);
-        next[addTarget.pageIdx][addTarget.slotIdx] = card;
-      } else {
-        // Find first empty slot across all pages
-        let placed = false;
-        for (let pi = 0; pi < next.length && !placed; pi++) {
-          for (let si = 0; si < 9 && !placed; si++) {
-            if (!next[pi][si]) {
-              next[pi][si] = card;
-              placed = true;
-            }
-          }
-        }
-        if (!placed) {
-          next.push([card, ...[...Array(8)].map(() => null)] as CardSlot[]);
-        }
-      }
-      return next;
-    });
+  // Picking a card from search no longer drops it straight into the binder.
+  // It opens the confirm step, which then persists the card to the backend so
+  // it survives a refresh (the previous local-only placement did not).
+  function handlePick(card: SearchCard) {
+    setPendingCard(card);
+    setConfirmError(null);
     setShowManualAdd(false);
-    setAddTarget(null);
+  }
+
+  async function handleConfirm(details: CardDetails) {
+    if (!pendingCard) return;
+    setConfirmSaving(true);
+    setConfirmError(null);
+    try {
+      const created = await fetchAPI<{ id: string }>("/binder/cards", {
+        method: "POST",
+        body: {
+          name: pendingCard.name,
+          set_code: pendingCard.set || null,
+          number: pendingCard.num || null,
+          rarity: details.rarity,
+          condition: details.condition,
+          language: details.language,
+          holo_type: details.holo_type,
+          image_url: pendingCard.image || null,
+          // Create the card unplaced, then assign it to the chosen slot below.
+          place_in_binder: false,
+        },
+      });
+      if (!created) throw new Error("Could not save the card.");
+
+      const target = addTarget ?? firstEmptySlot(pages);
+      await fetchAPI<BackendBinderResponse>(
+        `/binder/pages/${target.pageIdx}/slots/${target.slotIdx}`,
+        { method: "PUT", body: { card_id: created.id } },
+      );
+
+      const newCard: NonNullable<CardSlot> = {
+        id: created.id,
+        name: pendingCard.name,
+        set: pendingCard.set,
+        num: pendingCard.num,
+        rarity: details.rarity,
+        image: pendingCard.image,
+      };
+      setPages((prev) => placeCardAt(prev, target, newCard));
+      setPendingCard(null);
+      setAddTarget(null);
+    } catch (error) {
+      setConfirmError(error instanceof Error ? error.message : "Could not save the card.");
+    } finally {
+      setConfirmSaving(false);
+    }
   }
 
   return (
@@ -255,6 +308,31 @@ export default function BinderPage() {
           onClose={() => {
             setShowManualAdd(false);
             setAddTarget(null);
+          }}
+        />
+      )}
+      {pendingCard && (
+        <ConfirmCardModal
+          identity={{
+            name: pendingCard.name,
+            set_name: pendingCard.set_name,
+            set_code: pendingCard.set || null,
+            number: pendingCard.num,
+            image_url: pendingCard.image || null,
+          }}
+          initial={defaultDetails({ rarity: pendingCard.rarity })}
+          saving={confirmSaving}
+          error={confirmError}
+          onConfirm={handleConfirm}
+          onClose={() => {
+            setPendingCard(null);
+            setAddTarget(null);
+            setConfirmError(null);
+          }}
+          onSearchAgain={() => {
+            setPendingCard(null);
+            setConfirmError(null);
+            setShowManualAdd(true);
           }}
         />
       )}
