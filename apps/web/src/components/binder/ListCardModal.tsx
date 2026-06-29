@@ -3,25 +3,18 @@
 import Link from "next/link";
 import { useState } from "react";
 import type { CardSlot } from "@/lib/binderTypes";
-import {
-  CONDITION_OPTIONS,
-  HOLO_OPTIONS,
-  languageLabel,
-} from "@/lib/cardDetails";
+import { conditionLabel, holoLabel, languageLabel } from "@/lib/cardDetails";
 import { ApiError, fetchAPI } from "@/lib/fetchAPI";
-
-function conditionLabel(value: string | null | undefined): string {
-  if (!value) return "—";
-  return CONDITION_OPTIONS.find((o) => o.value === value)?.label ?? value;
-}
-
-function holoLabel(value: string | null | undefined): string {
-  return HOLO_OPTIONS.find((o) => o.value === (value ?? "normal"))?.label ?? "Normal";
-}
 
 // Each card can only be listed once — we list the existing card id and let the
 // API reject duplicates. Older localStorage-only cards have no backend row yet,
-// so those fall back to being created first.
+// so a 404 means we persist the card first, then list that new id.
+//
+// Note: that fallback can't dedupe a purely local card across attempts — the
+// binder slot keeps its local id, so a second listing attempt 404s again and
+// creates another backend row. It's effectively dead now that the binder is
+// backend-backed (every slot already carries a real card id); kept only for
+// stale localStorage binders from before that change.
 type OwnedCard = { id: string };
 type CreatedListing = { id: string };
 

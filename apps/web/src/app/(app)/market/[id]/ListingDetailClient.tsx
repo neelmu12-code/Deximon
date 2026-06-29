@@ -14,12 +14,11 @@ import {
 import { Stars } from "@/components/ui/Stars";
 import { UserAvatar } from "@/components/ui/UserAvatar";
 import { useAuth } from "@/lib/auth";
+import { conditionLabel, holoLabel, languageLabel } from "@/lib/cardDetails";
 import { ApiError, fetchAPI } from "@/lib/fetchAPI";
 import {
-  conditionLabel,
+  LISTING_PAGE_LIMIT,
   formatPrice,
-  holoLabel,
-  languageLabel,
   listingImageUrl,
   listingStatusLabel,
   type Conversation,
@@ -67,7 +66,7 @@ function CardArt({ card }: { card: ListingCard }) {
           fill
           unoptimized
           sizes="(max-width: 1024px) 100vw, 360px"
-          className="object-cover"
+          className="object-contain"
           onError={() => setErrored(true)}
         />
       ) : (
@@ -124,7 +123,7 @@ export function ListingDetailClient({ id }: { id: string }) {
   useEffect(() => {
     if (!listing) return;
     const controller = new AbortController();
-    fetchAPI<Listing[]>("/market/listings?limit=50", { signal: controller.signal })
+    fetchAPI<Listing[]>(`/market/listings?limit=${LISTING_PAGE_LIMIT}`, { signal: controller.signal })
       .then((data) => {
         const sellerListings = (data ?? []).filter(
           (l) => l.seller_id === listing.seller_id && l.id !== listing.id,
@@ -415,7 +414,7 @@ function CardArtThumb({ card }: { card: ListingCard }) {
       fill
       unoptimized
       sizes="200px"
-      className="object-cover"
+      className="object-contain"
       onError={() => setErrored(true)}
     />
   );
