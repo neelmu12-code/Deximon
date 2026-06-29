@@ -2,17 +2,17 @@
 
 import { useState, useEffect } from "react";
 import Image from "next/image";
-import type { CardSlot } from "@/lib/binderTypes";
+import type { SearchCard } from "@/lib/cardDetails";
 import { fetchAPI } from "@/lib/fetchAPI";
 
 type Props = {
-  onPick: (card: NonNullable<CardSlot>) => void;
+  onPick: (card: SearchCard) => void;
   onClose: () => void;
 };
 
 export function ManualAddModal({ onPick, onClose }: Props) {
   const [query, setQuery] = useState("");
-  const [results, setResults] = useState<NonNullable<CardSlot>[]>([]);
+  const [results, setResults] = useState<SearchCard[]>([]);
   const [loading, setLoading] = useState(false);
   const [debounced, setDebounced] = useState("");
 
@@ -29,7 +29,7 @@ export function ManualAddModal({ onPick, onClose }: Props) {
     }
     const controller = new AbortController();
     setLoading(true);
-    fetchAPI<NonNullable<CardSlot>[]>(
+    fetchAPI<SearchCard[]>(
       `/cards/search?q=${encodeURIComponent(debounced)}&limit=24`,
       { signal: controller.signal },
     )

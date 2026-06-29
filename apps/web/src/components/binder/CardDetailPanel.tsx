@@ -2,12 +2,14 @@ import Image from "next/image";
 import Link from "next/link";
 import { useState } from "react";
 import type { CardSlot } from "@/lib/binderTypes";
+import { CONDITION_OPTIONS, languageLabel } from "@/lib/cardDetails";
 import { ListCardModal } from "./ListCardModal";
 
 type Props = {
   card: NonNullable<CardSlot>;
   onClose: () => void;
   onListed: (result: { listingId: string; price: number }) => void;
+  onRemove: () => void;
 };
 
 function ComingSoonButton({ label, variant }: { label: string; variant: "primary" | "ghost" | "danger" }) {
@@ -29,8 +31,13 @@ function ComingSoonButton({ label, variant }: { label: string; variant: "primary
   );
 }
 
-export function CardDetailPanel({ card, onClose, onListed }: Props) {
+export function CardDetailPanel({ card, onClose, onListed, onRemove }: Props) {
   const [showListModal, setShowListModal] = useState(false);
+
+  const conditionLabel = card.condition
+    ? CONDITION_OPTIONS.find((option) => option.value === card.condition)?.label ?? card.condition
+    : "—";
+  const languageDisplay = card.language ? languageLabel(card.language) : "—";
 
   return (
     <div className="fixed inset-0 z-50">
@@ -77,12 +84,14 @@ export function CardDetailPanel({ card, onClose, onListed }: Props) {
 
           {/* Stats */}
           <div className="grid grid-cols-2 gap-3">
-            {(["Condition", "Language"] as const).map((label) => (
-              <div key={label} className="bg-surface border border-hair rounded-lg p-3">
-                <div className="text-[10px] uppercase tracking-[0.18em] text-ink3 mb-1">{label}</div>
-                <div className="text-sm text-ink">—</div>
-              </div>
-            ))}
+            <div className="bg-surface border border-hair rounded-lg p-3">
+              <div className="text-[10px] uppercase tracking-[0.18em] text-ink3 mb-1">Condition</div>
+              <div className="text-sm text-ink">{conditionLabel}</div>
+            </div>
+            <div className="bg-surface border border-hair rounded-lg p-3">
+              <div className="text-[10px] uppercase tracking-[0.18em] text-ink3 mb-1">Language</div>
+              <div className="text-sm text-ink">{languageDisplay}</div>
+            </div>
           </div>
 
           {/* Notes */}
@@ -116,7 +125,13 @@ export function CardDetailPanel({ card, onClose, onListed }: Props) {
                 >
                   List this card
                 </button>
-                <ComingSoonButton label="Remove" variant="danger" />
+                <button
+                  type="button"
+                  onClick={onRemove}
+                  className="w-full py-2.5 rounded-lg border border-hair text-sm font-medium text-red-400 hover:bg-red-500/10 hover:border-red-500/40 transition-colors"
+                >
+                  Remove
+                </button>
               </>
             )}
           </div>
