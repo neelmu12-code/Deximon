@@ -19,13 +19,9 @@ function holoLabel(value: string | null | undefined): string {
   return HOLO_OPTIONS.find((o) => o.value === (value ?? "normal"))?.label ?? "Normal";
 }
 
-// The binder is currently localStorage-backed, so a binder card has no row in the
-// `cards` table yet. To create a real listing we first persist the card via
-// POST /binder/cards (Collection backend), then POST /market/listings with the
-// returned owned-card id. We pass place_in_binder: false so this listing-only card
-// does not get auto-placed into a backend binder slot the localStorage binder can't
-// see. Once the binder is wired to the backend, the create-card step here can be
-// dropped in favour of the existing owned-card id.
+// Each card can only be listed once — we list the existing card id and let the
+// API reject duplicates. Older localStorage-only cards have no backend row yet,
+// so those fall back to being created first.
 type OwnedCard = { id: string };
 type CreatedListing = { id: string };
 
@@ -52,31 +48,43 @@ export function ListCardModal({ card, onClose, onListed }: Props) {
     setSubmitting(true);
     setError(null);
     try {
-      const owned = await fetchAPI<OwnedCard>("/binder/cards", {
-        method: "POST",
-        body: {
-          name: card.name,
-          set_code: card.set || null,
-          number: card.num || null,
-          rarity: card.rarity || null,
-          condition: card.condition || null,
-          language: card.language || null,
-          holo_type: card.holo_type || "normal",
-          image_url: card.image?.startsWith("http") ? card.image : null,
-          place_in_binder: false,
-        },
-      });
-      if (!owned) throw new Error("Card could not be saved.");
-
       const trimmedPrice = price.trim();
-      const listing = await fetchAPI<CreatedListing>("/market/listings", {
-        method: "POST",
-        body: {
-          card_id: owned.id,
-          asking_price: trimmedPrice === "" ? null : trimmedPrice,
-          notes: notes.trim() === "" ? null : notes.trim(),
-        },
-      });
+      const listingBody = {
+        asking_price: trimmedPrice === "" ? null : trimmedPrice,
+        notes: notes.trim() === "" ? null : notes.trim(),
+      };
+
+      let listing: CreatedListing | null;
+      try {
+        listing = await fetchAPI<CreatedListing>("/market/listings", {
+          method: "POST",
+          body: { card_id: card.id, ...listingBody },
+        });
+      } catch (listError) {
+        if (listError instanceof ApiError && listError.status === 404) {
+          const owned = await fetchAPI<OwnedCard>("/binder/cards", {
+            method: "POST",
+            body: {
+              name: card.name,
+              set_code: card.set || null,
+              number: card.num || null,
+              rarity: card.rarity || null,
+              condition: card.condition || null,
+              language: card.language || null,
+              holo_type: card.holo_type || "normal",
+              image_url: card.image?.startsWith("http") ? card.image : null,
+              place_in_binder: false,
+            },
+          });
+          if (!owned) throw new Error("Card could not be saved.");
+          listing = await fetchAPI<CreatedListing>("/market/listings", {
+            method: "POST",
+            body: { card_id: owned.id, ...listingBody },
+          });
+        } else {
+          throw listError;
+        }
+      }
       if (!listing) throw new Error("Listing could not be created.");
 
       setCreated(listing);
