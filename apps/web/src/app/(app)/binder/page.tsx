@@ -12,7 +12,14 @@ import { ManualAddModal } from "@/components/binder/ManualAddModal";
 import { ConfirmCardModal } from "@/components/binder/ConfirmCardModal";
 import { CardDetailPanel } from "@/components/binder/CardDetailPanel";
 import { CoverThumb } from "@/components/binder/CoverThumb";
-import { defaultDetails, type CardDetails, type HoloType, type SearchCard } from "@/lib/cardDetails";
+import {
+  defaultDetails,
+  pokemonImageUrl,
+  type BackendOwnedCard,
+  type CardDetails,
+  type SearchCard,
+} from "@/lib/cardDetails";
+import { LISTING_PAGE_LIMIT } from "@/lib/marketplace";
 
 const STORAGE_KEYS = {
   pages: "deximon_binder_pages",
@@ -21,18 +28,6 @@ const STORAGE_KEYS = {
 
 const PLACEHOLDER_CARD_IMAGE =
   "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 250 350'%3E%3Crect width='250' height='350' rx='18' fill='%23201916'/%3E%3Crect x='18' y='18' width='214' height='314' rx='14' fill='none' stroke='%23715a32' stroke-width='4' stroke-dasharray='12 10'/%3E%3Ctext x='125' y='178' text-anchor='middle' fill='%23b99a52' font-family='Arial' font-size='20'%3EDeximon%3C/text%3E%3C/svg%3E";
-
-type BackendOwnedCard = {
-  id: string;
-  name: string;
-  set_code: string | null;
-  number: string | null;
-  rarity: string | null;
-  condition: string | null;
-  language: string | null;
-  holo_type: HoloType;
-  image_url: string | null;
-};
 
 type BackendBinderSlot = {
   slot_index: number;
@@ -72,12 +67,7 @@ function loadFromStorage<T>(key: string, fallback: T): T {
 }
 
 function imageForCard(card: BackendOwnedCard): string {
-  if (card.image_url) return card.image_url;
-  if (card.set_code && card.number) {
-    const cardNumber = card.number.split("/")[0];
-    return `https://images.pokemontcg.io/${card.set_code}/${cardNumber}.png`;
-  }
-  return PLACEHOLDER_CARD_IMAGE;
+  return card.image_url ?? pokemonImageUrl(card.set_code, card.number) ?? PLACEHOLDER_CARD_IMAGE;
 }
 
 function mapBackendBinder(binder: BackendBinderResponse): CardSlot[][] {
@@ -146,7 +136,11 @@ export default function BinderPage() {
         if (!binder || cancelled) return;
         const mapped = mapBackendBinder(binder);
         try {
-          const listings = await fetchAPI<BackendListing[]>("/market/listings?limit=50");
+          // Capped at the 50 newest listings, so a "listed" badge can be missed
+          // for a card whose listing has scrolled past that window.
+          const listings = await fetchAPI<BackendListing[]>(
+            `/market/listings?limit=${LISTING_PAGE_LIMIT}`,
+          );
           if (listings && !cancelled) {
             const byCard = new Map<string, NonNullable<CardSlot>["listed"]>();
             for (const listing of listings) {

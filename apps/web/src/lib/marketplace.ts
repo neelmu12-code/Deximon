@@ -1,4 +1,11 @@
+import { pokemonImageUrl } from "@/lib/cardDetails";
+
 export type ListingStatus = "available" | "on_hold" | "sold" | "cancelled";
+
+// The list endpoint caps results at 50 and the marketplace filters/sorts that
+// page client-side. Listings past the 50 newest won't show up (and won't be
+// counted in the facets) until the API grows real pagination.
+export const LISTING_PAGE_LIMIT = 50;
 
 export type ListingCard = {
   id: string;
@@ -83,50 +90,5 @@ export function formatPrice(price: number | null): string {
 }
 
 export function listingImageUrl(card: ListingCard): string | null {
-  if (card.image_url) return card.image_url;
-  if (card.set_code && card.number) {
-    return `https://images.pokemontcg.io/${card.set_code}/${card.number.split("/")[0]}.png`;
-  }
-  return null;
-}
-
-export function conditionLabel(condition: string): string {
-  switch (condition.toUpperCase()) {
-    case "NM":
-      return "Near Mint";
-    case "LP":
-      return "Lightly Played";
-    case "MP":
-      return "Moderately Played";
-    case "HP":
-      return "Heavily Played";
-    case "DMG":
-      return "Damaged";
-    default:
-      return condition;
-  }
-}
-
-export function languageLabel(language: string | null): string {
-  if (!language) return "—";
-  switch (language.toUpperCase()) {
-    case "EN":
-      return "English";
-    case "JA":
-    case "JP":
-      return "Japanese";
-    default:
-      return language;
-  }
-}
-
-export function holoLabel(holoType: ListingCard["holo_type"]): string {
-  switch (holoType) {
-    case "holo":
-      return "Yes — standard holo";
-    case "reverse_holo":
-      return "Reverse holo";
-    default:
-      return "No";
-  }
+  return card.image_url ?? pokemonImageUrl(card.set_code, card.number);
 }

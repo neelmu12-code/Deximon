@@ -23,6 +23,7 @@ import type { CardSlot } from "@/lib/binderTypes";
 import { useAuth } from "@/lib/auth";
 import { ApiError, fetchAPI } from "@/lib/fetchAPI";
 import {
+  LISTING_PAGE_LIMIT,
   formatPrice,
   listingImageUrl,
   listingStatusLabel,
@@ -260,7 +261,10 @@ export function MarketplaceClient() {
 
   useEffect(() => {
     const controller = new AbortController();
-    const search = new URLSearchParams({ limit: "50" });
+    // We pull one capped page and do all faceting/filtering/sorting client-side,
+    // so the sidebar only ever reflects these listings. Fine at seed scale; needs
+    // server-side filtering + pagination once listings outgrow LISTING_PAGE_LIMIT.
+    const search = new URLSearchParams({ limit: String(LISTING_PAGE_LIMIT) });
     const trimmed = query.trim();
     if (trimmed) search.set("q", trimmed);
 
@@ -507,28 +511,31 @@ export function MarketplaceClient() {
                     {priceMax >= maxPrice ? "+" : ""}
                   </span>
                 </div>
-                <div className="space-y-1">
+                {/* Both thumbs share one track; pointer-events live on the thumbs
+                    (see .range-dual in globals.css) so neither slider covers the
+                    other and both stay grabbable even when they meet. */}
+                <div className="range-dual">
                   <input
                     type="range"
                     min={0}
                     max={maxPrice}
                     value={priceMin}
+                    aria-label="Minimum price"
                     onChange={(event) => {
                       const value = Math.min(Number(event.target.value), priceMax);
                       setPriceRange({ min: value, max: priceMax });
                     }}
-                    className="w-full accent-dx-red"
                   />
                   <input
                     type="range"
                     min={0}
                     max={maxPrice}
                     value={priceMax}
+                    aria-label="Maximum price"
                     onChange={(event) => {
                       const value = Math.max(Number(event.target.value), priceMin);
                       setPriceRange({ min: priceMin, max: value });
                     }}
-                    className="w-full accent-dx-red"
                   />
                 </div>
               </FilterAccordion>

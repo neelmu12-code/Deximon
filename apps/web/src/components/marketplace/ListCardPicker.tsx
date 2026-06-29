@@ -3,20 +3,9 @@
 import Image from "next/image";
 import { useEffect, useMemo, useState } from "react";
 import type { CardSlot } from "@/lib/binderTypes";
-import type { HoloType } from "@/lib/cardDetails";
+import { pokemonImageUrl, type BackendOwnedCard } from "@/lib/cardDetails";
 import { ApiError, fetchAPI } from "@/lib/fetchAPI";
-
-type BackendOwnedCard = {
-  id: string;
-  name: string;
-  set_code: string | null;
-  number: string | null;
-  rarity: string | null;
-  condition: string | null;
-  language: string | null;
-  holo_type: HoloType;
-  image_url: string | null;
-};
+import { LISTING_PAGE_LIMIT } from "@/lib/marketplace";
 
 type BackendBinderResponse = {
   pages: { slots: { card: BackendOwnedCard | null }[] }[];
@@ -25,11 +14,7 @@ type BackendBinderResponse = {
 type BackendListing = { card_id: string };
 
 function imageFor(card: BackendOwnedCard): string | null {
-  if (card.image_url) return card.image_url;
-  if (card.set_code && card.number) {
-    return `https://images.pokemontcg.io/${card.set_code}/${card.number.split("/")[0]}.png`;
-  }
-  return null;
+  return card.image_url ?? pokemonImageUrl(card.set_code, card.number);
 }
 
 function toSlot(card: BackendOwnedCard): NonNullable<CardSlot> {
@@ -69,7 +54,7 @@ function PickerThumb({ card }: { card: BackendOwnedCard }) {
       fill
       unoptimized
       sizes="120px"
-      className="object-cover"
+      className="object-contain"
       onError={() => setErrored(true)}
     />
   );
@@ -92,7 +77,7 @@ export function ListCardPicker({
     setLoading(true);
     Promise.all([
       fetchAPI<BackendBinderResponse>("/binder/me", { signal: controller.signal }),
-      fetchAPI<BackendListing[]>("/market/listings?limit=50", {
+      fetchAPI<BackendListing[]>(`/market/listings?limit=${LISTING_PAGE_LIMIT}`, {
         signal: controller.signal,
       }).catch(() => null),
     ])

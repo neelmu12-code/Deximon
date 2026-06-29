@@ -2,7 +2,7 @@ import Image from "next/image";
 import Link from "next/link";
 import { useState } from "react";
 import type { CardSlot } from "@/lib/binderTypes";
-import { CONDITION_OPTIONS, languageLabel } from "@/lib/cardDetails";
+import { conditionLabel, languageLabel } from "@/lib/cardDetails";
 import { ListCardModal } from "./ListCardModal";
 
 type Props = {
@@ -34,10 +34,8 @@ function ComingSoonButton({ label, variant }: { label: string; variant: "primary
 export function CardDetailPanel({ card, onClose, onListed, onRemove }: Props) {
   const [showListModal, setShowListModal] = useState(false);
 
-  const conditionLabel = card.condition
-    ? CONDITION_OPTIONS.find((option) => option.value === card.condition)?.label ?? card.condition
-    : "—";
-  const languageDisplay = card.language ? languageLabel(card.language) : "—";
+  const conditionDisplay = conditionLabel(card.condition);
+  const languageDisplay = languageLabel(card.language);
 
   return (
     <div className="fixed inset-0 z-50">
@@ -86,7 +84,7 @@ export function CardDetailPanel({ card, onClose, onListed, onRemove }: Props) {
           <div className="grid grid-cols-2 gap-3">
             <div className="bg-surface border border-hair rounded-lg p-3">
               <div className="text-[10px] uppercase tracking-[0.18em] text-ink3 mb-1">Condition</div>
-              <div className="text-sm text-ink">{conditionLabel}</div>
+              <div className="text-sm text-ink">{conditionDisplay}</div>
             </div>
             <div className="bg-surface border border-hair rounded-lg p-3">
               <div className="text-[10px] uppercase tracking-[0.18em] text-ink3 mb-1">Language</div>

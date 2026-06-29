@@ -32,6 +32,21 @@ export type SearchCard = {
   image: string;
 };
 
+// An owned-card row as returned by the binder/cards backend. Shared so the
+// binder, the list-a-card picker, and anything else reading owned cards agree
+// on one shape instead of redeclaring it.
+export type BackendOwnedCard = {
+  id: string;
+  name: string;
+  set_code: string | null;
+  number: string | null;
+  rarity: string | null;
+  condition: string | null;
+  language: string | null;
+  holo_type: HoloType;
+  image_url: string | null;
+};
+
 export const HOLO_OPTIONS: { value: HoloType; label: string }[] = [
   { value: "normal", label: "Normal" },
   { value: "holo", label: "Holo" },
@@ -85,8 +100,30 @@ export function normalizeLanguage(language: string | null | undefined): string {
   return LANGUAGE_OPTIONS.some((o) => o.value === code) ? code : "EN";
 }
 
-export function languageLabel(value: string): string {
-  return LANGUAGE_OPTIONS.find((o) => o.value === value)?.label ?? value;
+export function languageLabel(value: string | null | undefined): string {
+  if (!value) return "—";
+  // "JA" is the ISO-639 code; some sources send it where we store "JP".
+  const code = value.toUpperCase() === "JA" ? "JP" : value.toUpperCase();
+  return LANGUAGE_OPTIONS.find((o) => o.value === code)?.label ?? value;
+}
+
+export function conditionLabel(value: string | null | undefined): string {
+  if (!value) return "—";
+  return CONDITION_OPTIONS.find((o) => o.value === value.toUpperCase())?.label ?? value;
+}
+
+export function holoLabel(value: string | null | undefined): string {
+  return HOLO_OPTIONS.find((o) => o.value === (value ?? "normal"))?.label ?? "Normal";
+}
+
+// Public card art served by the pokemontcg.io CDN. Numbers can arrive in the
+// collector "4/102" format; the CDN only wants the leading index.
+export function pokemonImageUrl(
+  setCode: string | null,
+  number: string | null,
+): string | null {
+  if (!setCode || !number) return null;
+  return `https://images.pokemontcg.io/${setCode}/${number.split("/")[0]}.png`;
 }
 
 // Sensible defaults for the editable fields given whatever the catalog/scan knew.
