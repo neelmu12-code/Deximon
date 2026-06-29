@@ -2,6 +2,7 @@
 
 import Image from "next/image";
 import { useState } from "react";
+import type { HoloType } from "@/lib/cardDetails";
 
 // Binder teammate: replace `pages` prop with data fetched from the binder API.
 // Each inner array is one page (9 slots). A null slot renders as an empty pocket.
@@ -16,6 +17,7 @@ export type CardSlot = {
   image: string;
   condition?: string | null;
   language?: string | null;
+  holo_type?: HoloType | null;
   listed?: { listingId?: string; price: number; status: "Available" | "On Hold" | "Sold" };
 } | null;
 

@@ -3,7 +3,21 @@
 import Link from "next/link";
 import { useState } from "react";
 import type { CardSlot } from "@/lib/binderTypes";
+import {
+  CONDITION_OPTIONS,
+  HOLO_OPTIONS,
+  languageLabel,
+} from "@/lib/cardDetails";
 import { ApiError, fetchAPI } from "@/lib/fetchAPI";
+
+function conditionLabel(value: string | null | undefined): string {
+  if (!value) return "—";
+  return CONDITION_OPTIONS.find((o) => o.value === value)?.label ?? value;
+}
+
+function holoLabel(value: string | null | undefined): string {
+  return HOLO_OPTIONS.find((o) => o.value === (value ?? "normal"))?.label ?? "Normal";
+}
 
 // The binder is currently localStorage-backed, so a binder card has no row in the
 // `cards` table yet. To create a real listing we first persist the card via
@@ -45,7 +59,10 @@ export function ListCardModal({ card, onClose, onListed }: Props) {
           set_code: card.set || null,
           number: card.num || null,
           rarity: card.rarity || null,
-          holo_type: "normal",
+          condition: card.condition || null,
+          language: card.language || null,
+          holo_type: card.holo_type || "normal",
+          image_url: card.image?.startsWith("http") ? card.image : null,
           place_in_binder: false,
         },
       });
@@ -126,6 +143,26 @@ export function ListCardModal({ card, onClose, onListed }: Props) {
                 {error}
               </div>
             )}
+
+            <div className="rounded-lg border border-hair bg-surface2 px-3 py-2.5">
+              <div className="mb-1.5 text-[11px] uppercase tracking-[0.18em] text-ink3">
+                Card details
+              </div>
+              <div className="flex flex-wrap gap-x-4 gap-y-1 text-[12px] text-ink2">
+                <span>
+                  Condition: <span className="text-ink">{conditionLabel(card.condition)}</span>
+                </span>
+                <span>
+                  Language: <span className="text-ink">{languageLabel(card.language ?? "EN")}</span>
+                </span>
+                <span>
+                  Holo: <span className="text-ink">{holoLabel(card.holo_type)}</span>
+                </span>
+              </div>
+              <div className="mt-1.5 text-[11px] text-ink3">
+                Carried over from your binder card details.
+              </div>
+            </div>
 
             <label className="block space-y-1.5">
               <span className="text-[11px] uppercase tracking-[0.18em] text-ink3">

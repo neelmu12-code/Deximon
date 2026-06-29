@@ -10,6 +10,7 @@ export type ListingCard = {
   condition: string | null;
   language: string | null;
   holo_type: "normal" | "holo" | "reverse_holo";
+  image_url: string | null;
 };
 
 export type ListingSeller = {
@@ -79,4 +80,53 @@ export function formatPrice(price: number | null): string {
     style: "currency",
     currency: "USD",
   }).format(price);
+}
+
+export function listingImageUrl(card: ListingCard): string | null {
+  if (card.image_url) return card.image_url;
+  if (card.set_code && card.number) {
+    return `https://images.pokemontcg.io/${card.set_code}/${card.number.split("/")[0]}.png`;
+  }
+  return null;
+}
+
+export function conditionLabel(condition: string): string {
+  switch (condition.toUpperCase()) {
+    case "NM":
+      return "Near Mint";
+    case "LP":
+      return "Lightly Played";
+    case "MP":
+      return "Moderately Played";
+    case "HP":
+      return "Heavily Played";
+    case "DMG":
+      return "Damaged";
+    default:
+      return condition;
+  }
+}
+
+export function languageLabel(language: string | null): string {
+  if (!language) return "—";
+  switch (language.toUpperCase()) {
+    case "EN":
+      return "English";
+    case "JA":
+    case "JP":
+      return "Japanese";
+    default:
+      return language;
+  }
+}
+
+export function holoLabel(holoType: ListingCard["holo_type"]): string {
+  switch (holoType) {
+    case "holo":
+      return "Yes — standard holo";
+    case "reverse_holo":
+      return "Reverse holo";
+    default:
+      return "No";
+  }
 }
