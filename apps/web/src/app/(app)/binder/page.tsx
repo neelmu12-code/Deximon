@@ -12,7 +12,7 @@ import { ManualAddModal } from "@/components/binder/ManualAddModal";
 import { ConfirmCardModal } from "@/components/binder/ConfirmCardModal";
 import { CardDetailPanel } from "@/components/binder/CardDetailPanel";
 import { CoverThumb } from "@/components/binder/CoverThumb";
-import { defaultDetails, type CardDetails, type SearchCard } from "@/lib/cardDetails";
+import { defaultDetails, type CardDetails, type HoloType, type SearchCard } from "@/lib/cardDetails";
 
 const STORAGE_KEYS = {
   pages: "deximon_binder_pages",
@@ -30,6 +30,7 @@ type BackendOwnedCard = {
   rarity: string | null;
   condition: string | null;
   language: string | null;
+  holo_type: HoloType;
   image_url: string | null;
 };
 
@@ -82,6 +83,7 @@ function mapBackendBinder(binder: BackendBinderResponse): CardSlot[][] {
         rarity: slot.card.rarity ?? "",
         condition: slot.card.condition,
         language: slot.card.language,
+        holo_type: slot.card.holo_type,
         image: imageForCard(slot.card),
       };
     }
@@ -238,6 +240,7 @@ export default function BinderPage() {
         rarity: details.rarity,
         condition: details.condition,
         language: details.language,
+        holo_type: details.holo_type,
         image: pendingCard.image,
       };
       setPages((prev) => placeCardAt(prev, target, newCard));

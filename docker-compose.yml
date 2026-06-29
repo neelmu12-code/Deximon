@@ -70,6 +70,9 @@ services:
       # Server-side (SSR/RSC) URL — uses Docker service name, not localhost
       API_URL: ${API_URL:-http://api:8000}
       SCANNER_URL: ${SCANNER_URL:-http://scanner:8001}
+      # Poll for file changes — Windows bind mounts don't deliver inotify events.
+      WATCHPACK_POLLING: "true"
+      CHOKIDAR_USEPOLLING: "true"
     depends_on:
       - api
     ports:
