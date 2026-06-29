@@ -49,28 +49,49 @@ def actor_meta(user: User) -> dict[str, str]:
     return meta
 
 
-def enriched_meta(db: Session, notification: Notification) -> dict[str, str]:
-    meta = dict(notification.meta or {})
-    if meta.get("actor_avatar_url"):
-        return meta
+def _actor_username(notification: Notification) -> str | None:
+    """Username whose profile should enrich this notification's meta.
 
+    Returns None when the meta already carries the actor's avatar (so no lookup
+    is needed) or when there's no username to resolve.
+    """
+    meta = notification.meta or {}
+    if meta.get("actor_avatar_url"):
+        return None
     username = (
         meta.get("reviewer_username")
         or meta.get("sender_username")
         or meta.get("actor_username")
         or notification.title
     )
-    if not username:
-        return meta
+    return username or None
 
-    user = db.scalar(
+
+def _load_actors(db: Session, usernames: set[str]) -> dict[str, User]:
+    """Map lowercased username -> active user (with profile) for the given names."""
+    if not usernames:
+        return {}
+    users = db.scalars(
         select(User)
         .options(selectinload(User.profile))
-        .where(func.lower(User.username) == username.lower(), User.is_active.is_(True))
+        .where(func.lower(User.username).in_(usernames), User.is_active.is_(True))
     )
-    if user is None:
+    return {user.username.lower(): user for user in users}
+
+
+def _merge_actor(notification: Notification, actor: User | None) -> dict[str, str]:
+    meta = dict(notification.meta or {})
+    if actor is None:
         return meta
-    return {**meta, **actor_meta(user)}
+    return {**meta, **actor_meta(actor)}
+
+
+def enriched_meta(db: Session, notification: Notification) -> dict[str, str]:
+    username = _actor_username(notification)
+    if username is None:
+        return dict(notification.meta or {})
+    actors = _load_actors(db, {username.lower()})
+    return _merge_actor(notification, actors.get(username.lower()))
 
 
 def unread_count(db: Session, user_id: UUID) -> int:
@@ -81,8 +102,7 @@ def unread_count(db: Session, user_id: UUID) -> int:
     ) or 0
 
 
-def to_response(notification: Notification, db: Session | None = None) -> NotificationResponse:
-    meta = enriched_meta(db, notification) if db is not None else (notification.meta or {})
+def _build_response(notification: Notification, meta: dict[str, str]) -> NotificationResponse:
     return NotificationResponse(
         id=notification.id,
         type=notification.type,
@@ -92,6 +112,32 @@ def to_response(notification: Notification, db: Session | None = None) -> Notifi
         meta=meta,
         created_at=notification.created_at,
     )
+
+
+def to_response(notification: Notification, db: Session | None = None) -> NotificationResponse:
+    meta = enriched_meta(db, notification) if db is not None else dict(notification.meta or {})
+    return _build_response(notification, meta)
+
+
+def to_responses(db: Session, notifications: list[Notification]) -> list[NotificationResponse]:
+    """Build responses for a list, resolving every actor profile in one query.
+
+    The per-notification to_response would otherwise fire a user lookup for each
+    row whose meta lacks an avatar, so a page of notifications becomes N queries.
+    """
+    wanted: set[str] = set()
+    for notification in notifications:
+        username = _actor_username(notification)
+        if username is not None:
+            wanted.add(username.lower())
+
+    actors = _load_actors(db, wanted)
+    responses: list[NotificationResponse] = []
+    for notification in notifications:
+        username = _actor_username(notification)
+        actor = actors.get(username.lower()) if username is not None else None
+        responses.append(_build_response(notification, _merge_actor(notification, actor)))
+    return responses
 
 
 async def create_notification(
