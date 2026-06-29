@@ -28,6 +28,8 @@ type BackendOwnedCard = {
   set_code: string | null;
   number: string | null;
   rarity: string | null;
+  condition: string | null;
+  language: string | null;
   image_url: string | null;
 };
 
@@ -78,6 +80,8 @@ function mapBackendBinder(binder: BackendBinderResponse): CardSlot[][] {
         set: slot.card.set_code ?? "",
         num: slot.card.number ?? "",
         rarity: slot.card.rarity ?? "",
+        condition: slot.card.condition,
+        language: slot.card.language,
         image: imageForCard(slot.card),
       };
     }
@@ -174,6 +178,21 @@ export default function BinderPage() {
     setDetailCard((current) => (current ? { ...current, listed } : current));
   }
 
+  async function handleRemoveDetailCard() {
+    if (!detailCard) return;
+    const id = detailCard.id;
+    // Optimistically clear the slot and close the panel; the backend delete
+    // empties the slot via the card_id SET NULL FK, and GET /binder/me is the
+    // source of truth on reload.
+    setPages((prev) => prev.map((page) => page.map((slot) => (slot && slot.id === id ? null : slot))));
+    setDetailCard(null);
+    try {
+      await fetchAPI(`/binder/cards/${id}`, { method: "DELETE" });
+    } catch {
+      // Ignore: the local view is already updated.
+    }
+  }
+
   // Picking a card from search no longer drops it straight into the binder.
   // It opens the confirm step, which then persists the card to the backend so
   // it survives a refresh (the previous local-only placement did not).
@@ -217,6 +236,8 @@ export default function BinderPage() {
         set: pendingCard.set,
         num: pendingCard.num,
         rarity: details.rarity,
+        condition: details.condition,
+        language: details.language,
         image: pendingCard.image,
       };
       setPages((prev) => placeCardAt(prev, target, newCard));
@@ -341,6 +362,7 @@ export default function BinderPage() {
           card={detailCard}
           onClose={() => setDetailCard(null)}
           onListed={handleCardListed}
+          onRemove={handleRemoveDetailCard}
         />
       )}
     </div>

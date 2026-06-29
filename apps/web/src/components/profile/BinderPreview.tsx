@@ -14,6 +14,8 @@ export type CardSlot = {
   num: string;
   rarity: string;
   image: string;
+  condition?: string | null;
+  language?: string | null;
   listed?: { listingId?: string; price: number; status: "Available" | "On Hold" | "Sold" };
 } | null;
 
