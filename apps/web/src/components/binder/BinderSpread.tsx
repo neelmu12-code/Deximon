@@ -2,8 +2,32 @@
 
 import { useState, useEffect } from "react";
 import type { CardSlot } from "@/lib/binderTypes";
+import { fetchAPI } from "@/lib/fetchAPI";
 import { EditablePage } from "./EditablePage";
 import { PageSpine } from "./PageSpine";
+
+type SlotRef = { pageIdx: number; slotIdx: number };
+
+// Drag/remove update local state optimistically and also sync to the backend so
+// the change survives a refresh. Failures are swallowed on purpose: an offline
+// or signed-out user keeps the local view, and GET /binder/me is the source of
+// truth on the next load.
+function persistMove(from: SlotRef, to: SlotRef) {
+  if (from.pageIdx === to.pageIdx && from.slotIdx === to.slotIdx) return;
+  void fetchAPI("/binder/move", {
+    method: "POST",
+    body: {
+      from_page_index: from.pageIdx,
+      from_slot_index: from.slotIdx,
+      to_page_index: to.pageIdx,
+      to_slot_index: to.slotIdx,
+    },
+  }).catch(() => undefined);
+}
+
+function persistRemove(card: NonNullable<CardSlot>) {
+  void fetchAPI(`/binder/cards/${card.id}`, { method: "DELETE" }).catch(() => undefined);
+}
 
 type Props = {
   pages: CardSlot[][];
@@ -45,28 +69,32 @@ export function BinderSpread({ pages, setPages, onAdd, onCardClick }: Props) {
   }
   function onDrop(targetPage: number, targetSlot: number) {
     if (!dragSrc) return;
+    const from = dragSrc;
     setPages((prev) => {
       const next = prev.map((p) => [...p]);
       // Ensure both pages exist and have 9 slots
-      while (next.length <= Math.max(dragSrc.pageIdx, targetPage)) {
+      while (next.length <= Math.max(from.pageIdx, targetPage)) {
         next.push(Array(9).fill(null) as CardSlot[]);
       }
-      while (next[dragSrc.pageIdx].length < 9) next[dragSrc.pageIdx].push(null);
+      while (next[from.pageIdx].length < 9) next[from.pageIdx].push(null);
       while (next[targetPage].length < 9) next[targetPage].push(null);
-      const tmp = next[dragSrc.pageIdx][dragSrc.slotIdx];
-      next[dragSrc.pageIdx][dragSrc.slotIdx] = next[targetPage][targetSlot];
+      const tmp = next[from.pageIdx][from.slotIdx];
+      next[from.pageIdx][from.slotIdx] = next[targetPage][targetSlot];
       next[targetPage][targetSlot] = tmp;
       return next;
     });
+    persistMove(from, { pageIdx: targetPage, slotIdx: targetSlot });
     setDragSrc(null);
     setDragOver(null);
   }
   function onRemove(pageIdx: number, slotIdx: number) {
+    const removed = pages[pageIdx]?.[slotIdx];
     setPages((prev) => {
       const next = prev.map((p) => [...p]);
       if (next[pageIdx]) next[pageIdx][slotIdx] = null;
       return next;
     });
+    if (removed) persistRemove(removed);
   }
 
   function goForward() {
