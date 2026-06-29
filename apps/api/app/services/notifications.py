@@ -90,12 +90,18 @@ async def create_notification(
     db.refresh(notification)
 
     ws = hub.get(user_id)
-    if ws:
-        await ws.send_json(
-            {
-                "type": "notification",
-                "notification": to_response(notification, db).model_dump(mode="json"),
-                "unread_count": unread_count(db, user_id),
-            }
-        )
+    if ws is not None:
+        message = {
+            "type": "notification",
+            "notification": to_response(notification, db).model_dump(mode="json"),
+            "unread_count": unread_count(db, user_id),
+        }
+        try:
+            await ws.send_json(message)
+        except Exception:
+            # The client vanished without a clean close, so the socket is stale.
+            # Drop it instead of letting the send error bubble up into the request
+            # that triggered this notification (e.g. POST /conversations/{id}/messages
+            # would 500 just because the recipient's tab had gone away).
+            hub.pop(user_id, None)
     return notification
