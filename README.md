@@ -52,4 +52,4 @@ Useful local scripts:
 
 ## Status
 
-This project is under active development for EECS4314 (Winter 2026).
+This project is under active development for EECS4314 (Summer 2026).
