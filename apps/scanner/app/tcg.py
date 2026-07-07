@@ -124,7 +124,8 @@ _STOP_WORDS = {
     "weight",
     "your",
 }
-_SPECIAL_NAME_TOKENS = {"ex", "gx", "v", "vmax", "vstar"}
+_SPECIAL_NAME_TOKENS = {"ex", "gx", "v", "vmax", "vstar", "mega"}
+_MEGA_ALIAS_RE = re.compile(r"\bm\s+[a-z][a-z]{2,}")
 _KNOWN_NAME_HINTS = [
     "charizard",
     "pikachu",
@@ -151,7 +152,42 @@ _KNOWN_NAME_HINTS = [
     "snorlax",
     "machamp",
     "alakazam",
+    "scizor",
+    "charmeleon",
+    "charmander",
+    "blaziken",
+    "tyranitar",
+    "scyther",
+    "exeggcute",
 ]
+_CONTEXT_STOP_WORDS = _STOP_WORDS | {
+    "about",
+    "after",
+    "also",
+    "attack",
+    "attacks",
+    "cards",
+    "coin",
+    "damage",
+    "discard",
+    "each",
+    "effect",
+    "effects",
+    "flip",
+    "more",
+    "opponent",
+    "opponents",
+    "play",
+    "rule",
+    "special",
+    "they",
+    "them",
+    "then",
+    "these",
+    "turn",
+    "when",
+    "with",
+}
 
 
 def fuzzy_match(query: str, cards: Iterable[TcgCard]) -> tuple[TcgCard, float]:
@@ -169,10 +205,26 @@ def top_fuzzy_matches(query: str, cards: Iterable[TcgCard], limit: int = 3) -> l
     query_variants = _query_variants(query)
     scored = [(card, _score_card(query_variants, card)) for card in candidates]
     scored.sort(key=lambda item: item[1], reverse=True)
-    matches = [(card, score) for card, score in scored[:limit] if score > 0]
+    pool_size = max(limit * 8, 12)
+    pool = [(card, score, index) for index, (card, score) in enumerate(scored[:pool_size]) if score > 0]
+    matches = [
+        (
+            card,
+            _calibrated_confidence(
+                query_variants,
+                card,
+                score,
+                scored[index + 1][1] if index + 1 < len(scored) else 0,
+                index,
+            ),
+            score,
+        )
+        for card, score, index in pool
+    ]
     if not matches and candidates:
-        return [(candidates[0], 0.25)]
-    return [(card, max(0.25, min(score, 0.99))) for card, score in matches]
+        return [(candidates[0], 0.15)]
+    matches.sort(key=lambda item: (item[1], item[2]), reverse=True)
+    return [(card, confidence) for card, confidence, _score in matches[:limit]]
 
 
 def card_to_candidate(card: TcgCard, confidence: float) -> ScanCandidate:
@@ -412,8 +464,8 @@ def _signal_query(query: str) -> str:
     normalized = _normalize(query)
     words = [
         word
-        for word in re.findall(r"[a-z0-9][a-z0-9-]{1,}", normalized)
-        if word not in _STOP_WORDS
+        for word in re.findall(r"[a-z0-9][a-z0-9-]*", normalized)
+        if word not in _STOP_WORDS and (word.isdigit() or len(word) >= 2)
     ]
     for hint in _KNOWN_NAME_HINTS:
         if hint in normalized and hint not in words:
@@ -455,7 +507,10 @@ def _normalize(value: str) -> str:
 
 def _score_card(query_variants: Iterable[str], card: TcgCard) -> float:
     variants = list(query_variants)
-    scores = [_score_variant(variant, card) for variant in variants]
+    scores = [
+        max(_score_variant(variant, card) - min(index, 8) * 2, 0)
+        for index, variant in enumerate(variants)
+    ]
     if not scores:
         return 0.25
     return (max(scores) + _context_bonus(variants, card)) / 100
@@ -497,11 +552,60 @@ def _context_bonus(query_variants: Iterable[str], card: TcgCard) -> float:
 
     query = max(variants, key=len)
     name = _normalize(card.name)
-    if not name or fuzz.token_set_ratio(name, query) < 80:
-        return 0
+    name_similarity = fuzz.token_set_ratio(name, query) if name else 0
 
-    context = _normalize(card.search_text)
-    return min(fuzz.token_set_ratio(context, query) * 0.22, 24)
+    context = _normalize(card.ocr_text)
+    context_similarity = fuzz.token_set_ratio(context, query)
+    overlap = _context_overlap_count(query, card)
+    if name_similarity >= 80:
+        return min(context_similarity * 0.22 + min(overlap * 3, 8), 28)
+    if overlap >= 2:
+        return min(10 + overlap * 4, 22)
+    if overlap == 1 and context_similarity >= 85:
+        return 8
+    return 0
+
+
+def _calibrated_confidence(
+    query_variants: Iterable[str],
+    card: TcgCard,
+    score: float,
+    next_score: float,
+    rank: int,
+) -> float:
+    variants = list(query_variants)
+    confidence = min(score / 1.25, 0.99)
+    name_evidence = _name_evidence_level(variants, card)
+    context_evidence = max((_context_overlap_count(variant, card) for variant in variants), default=0)
+
+    missing_specials = _query_special_tokens(variants) - _special_tokens(card.name)
+    if missing_specials:
+        confidence = min(confidence, 0.58)
+        if "mega" in missing_specials:
+            confidence = min(confidence, 0.52)
+
+    if name_evidence == 0 and context_evidence == 0:
+        confidence = min(confidence, 0.44)
+    elif name_evidence <= 1 and context_evidence == 0:
+        confidence = min(confidence, 0.68)
+    elif name_evidence == 0 and context_evidence:
+        confidence = min(confidence, 0.72)
+    elif name_evidence <= 1 and context_evidence:
+        confidence = min(confidence, 0.82)
+
+    if context_evidence >= 2 and not missing_specials:
+        confidence = max(confidence, min(0.52 + context_evidence * 0.05, 0.72))
+
+    gap = score - next_score
+    if rank == 0:
+        if gap < 0.015:
+            confidence = min(confidence, 0.78)
+        elif gap < 0.04:
+            confidence = min(confidence, 0.86)
+    else:
+        confidence -= min(0.16, rank * 0.05)
+
+    return max(0.15, min(confidence, 0.99))
 
 
 def _number_matches(query: str, number: str) -> bool:
@@ -534,11 +638,76 @@ def _special_token_score(query: str, name: str) -> float:
     score = 10 * len(matching_tokens)
     if missing_tokens:
         score -= 16 * len(missing_tokens)
+        if "mega" in missing_tokens:
+            score -= 16
     return score
 
 
 def _special_tokens(value: str) -> set[str]:
-    return {token for token in _normalize(value).split() if token in _SPECIAL_NAME_TOKENS}
+    normalized = _normalize(value)
+    tokens = set(normalized.split())
+    specials = {token for token in tokens if token in _SPECIAL_NAME_TOKENS}
+    if _MEGA_ALIAS_RE.search(normalized):
+        specials.add("mega")
+    return specials
+
+
+def _identity_tokens(value: str) -> set[str]:
+    normalized = _normalize(value)
+    tokens = set(normalized.split())
+    if "mega" in _special_tokens(value):
+        tokens.discard("m")
+        tokens.add("mega")
+    return {
+        token
+        for token in tokens
+        if token in _SPECIAL_NAME_TOKENS
+        or (len(token) >= 2 and token not in _STOP_WORDS and not token.isdigit())
+    }
+
+
+def _name_evidence_level(query_variants: Iterable[str], card: TcgCard) -> int:
+    name_tokens = _identity_tokens(card.name)
+    if not name_tokens:
+        return 0
+
+    content_tokens = name_tokens - _SPECIAL_NAME_TOKENS
+    best_level = 0
+    name = _normalize(card.name)
+    for variant in query_variants:
+        variant_tokens = _identity_tokens(variant)
+        if name and name in variant:
+            return 3
+        if name_tokens.issubset(variant_tokens):
+            return 3
+        if fuzz.token_set_ratio(name, variant) >= 92 or (
+            content_tokens and content_tokens.issubset(variant_tokens)
+        ):
+            best_level = max(best_level, 2)
+        elif content_tokens & variant_tokens:
+            best_level = max(best_level, 1)
+    return best_level
+
+
+def _query_special_tokens(query_variants: Iterable[str]) -> set[str]:
+    specials: set[str] = set()
+    for variant in query_variants:
+        specials.update(_special_tokens(variant))
+    return specials
+
+
+def _context_overlap_count(query: str, card: TcgCard) -> int:
+    if not card.ocr_text:
+        return 0
+    return len(_context_tokens(query) & _context_tokens(card.ocr_text))
+
+
+def _context_tokens(value: str) -> set[str]:
+    return {
+        token
+        for token in _normalize(value).split()
+        if len(token) >= 4 and token not in _CONTEXT_STOP_WORDS and not token.isdigit()
+    }
 
 
 def best_local_candidate(query: str) -> ScanCandidate:

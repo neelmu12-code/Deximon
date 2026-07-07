@@ -333,6 +333,141 @@ def test_catalog_match_prefers_ex_title_over_noisy_full_art_text() -> None:
     assert candidates[0].id == "sv6-214"
 
 
+def test_catalog_match_prefers_mega_charizard_over_modern_ex_when_mega_seen() -> None:
+    catalog = [
+        TcgCard(
+            id="sv3-125",
+            name="Charizard ex",
+            set_name="Obsidian Flames",
+            set_code="sv3",
+            number="125",
+            rarity="Double Rare",
+            image_url=None,
+            ocr_text="Brave Wing Explosive Vortex Pokemon ex rule",
+        ),
+        TcgCard(
+            id="xy2-69",
+            name="M Charizard-EX",
+            set_name="Flashfire",
+            set_code="xy2",
+            number="69",
+            rarity="Rare Holo EX",
+            image_url=None,
+            ocr_text="Mega Evolution rule Inferno X Wild Blaze Charizard Spirit Link",
+        ),
+        TcgCard(
+            id="base1-4",
+            name="Charizard",
+            set_name="Base",
+            set_code="base1",
+            number="4",
+            rarity="Rare Holo",
+            image_url=None,
+        ),
+    ]
+
+    candidates = top_catalog_candidates(
+        "\n".join(
+            [
+                "662184 in 1000x1000",
+                "STAGE2",
+                "Mega Charizard X EX",
+                "HP 360",
+                "Inferno X",
+                "90",
+                "When your Mega Evolution",
+                "125/090",
+            ]
+        ),
+        catalog,
+    )
+
+    assert candidates[0].id == "xy2-69"
+    assert candidates[0].confidence > 0.55
+
+
+def test_catalog_match_uses_attack_text_when_title_is_hard_to_read() -> None:
+    catalog = [
+        TcgCard(
+            id="jung1-52",
+            name="Exeggcute",
+            set_name="Jungle",
+            set_code="jung1",
+            number="52",
+            rarity="Common",
+            image_url=None,
+            ocr_text="Hypnosis Leech Seed Egg Pokemon",
+        ),
+        TcgCard(
+            id="sv3-205",
+            name="Scizor ex",
+            set_name="Obsidian Flames",
+            set_code="sv3",
+            number="205",
+            rarity="Ultra Rare",
+            image_url=None,
+            ocr_text="Punishing Scissors Cut Metal Claw Pokemon ex rule",
+        ),
+    ]
+
+    candidates = top_catalog_candidates(
+        "\n".join(
+            [
+                "images",
+                "140 HP",
+                "Punishing Scissors",
+                "100",
+                "Cut",
+                "50",
+            ]
+        ),
+        catalog,
+    )
+
+    assert candidates[0].id == "sv3-205"
+    assert 0.55 <= candidates[0].confidence < 0.9
+
+
+def test_catalog_match_caps_confidence_when_ocr_has_no_identity_evidence() -> None:
+    catalog = [
+        TcgCard(
+            id="jung1-52",
+            name="Exeggcute",
+            set_name="Jungle",
+            set_code="jung1",
+            number="52",
+            rarity="Common",
+            image_url=None,
+            ocr_text="Hypnosis Leech Seed Egg Pokemon",
+        ),
+        TcgCard(
+            id="sv3-205",
+            name="Scizor ex",
+            set_name="Obsidian Flames",
+            set_code="sv3",
+            number="205",
+            rarity="Ultra Rare",
+            image_url=None,
+            ocr_text="Punishing Scissors Cut Metal Claw Pokemon ex rule",
+        ),
+    ]
+
+    candidates = top_catalog_candidates(
+        "\n".join(
+            [
+                "images",
+                "140 HP",
+                "100",
+                "50",
+                "weakness resistance retreat",
+            ]
+        ),
+        catalog,
+    )
+
+    assert candidates[0].confidence < 0.55
+
+
 def test_catalog_match_prefers_gx_over_plain_name() -> None:
     catalog = [
         TcgCard(
