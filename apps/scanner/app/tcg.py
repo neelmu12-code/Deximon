@@ -214,6 +214,7 @@ def load_catalog_from_path(data_dir: str) -> list[TcgCard]:
     if cards_dir is None:
         return []
 
+    sets_by_id = _load_set_metadata(cards_dir)
     cards_by_id: dict[str, TcgCard] = {}
     for path in sorted(cards_dir.glob("*.json")):
         try:
@@ -221,8 +222,14 @@ def load_catalog_from_path(data_dir: str) -> list[TcgCard]:
         except (OSError, json.JSONDecodeError):
             continue
 
+        fallback_set_code = path.stem
+        fallback_set_name = sets_by_id.get(fallback_set_code, "")
         for item in _iter_card_json(payload):
-            card = _card_from_json(item)
+            card = _card_from_json(
+                item,
+                fallback_set_code=fallback_set_code,
+                fallback_set_name=fallback_set_name,
+            )
             if card:
                 cards_by_id[card.id] = card
 
@@ -251,19 +258,48 @@ def _iter_card_json(payload: object) -> Iterable[dict[str, object]]:
             yield cast("dict[str, object]", item)
 
 
-def _card_from_json(item: dict[str, object]) -> TcgCard | None:
+def _load_set_metadata(cards_dir: Path) -> dict[str, str]:
+    repo_root = cards_dir.parent.parent if cards_dir.name == "en" else cards_dir.parent
+    sets_file = repo_root / "sets" / "en.json"
+    try:
+        payload = json.loads(sets_file.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return {}
+
+    sets_by_id: dict[str, str] = {}
+    for item in _iter_card_json(payload):
+        set_id = _required_str(item.get("id"))
+        set_name = _required_str(item.get("name"))
+        if set_id and set_name:
+            sets_by_id[set_id] = set_name
+    return sets_by_id
+
+
+def _card_from_json(
+    item: dict[str, object],
+    *,
+    fallback_set_code: str = "",
+    fallback_set_name: str = "",
+) -> TcgCard | None:
     card_id = _required_str(item.get("id"))
     name = _required_str(item.get("name"))
     if not card_id or not name:
         return None
 
     card_set = _as_dict(item.get("set"))
+    set_name = _required_str(card_set.get("name")) or _required_str(item.get("set")) or fallback_set_name
+    set_code = (
+        _required_str(card_set.get("id"))
+        or _required_str(item.get("setCode"))
+        or _required_str(item.get("set_code"))
+        or fallback_set_code
+    )
     images = _as_dict(item.get("images"))
     return TcgCard(
         id=card_id,
         name=name,
-        set_name=_required_str(card_set.get("name")),
-        set_code=_required_str(card_set.get("id")),
+        set_name=set_name,
+        set_code=set_code,
         number=_required_str(item.get("number")),
         rarity=_optional_str(item.get("rarity")),
         image_url=_optional_str(images.get("small")) or _optional_str(images.get("large")),
@@ -354,28 +390,31 @@ def _score_card(query_variants: Iterable[str], card: TcgCard) -> float:
     scores = [_score_variant(variant, card) for variant in query_variants]
     if not scores:
         return 0.25
-    return min(max(scores) / 100, 0.99)
+    return max(scores) / 100
 
 
 def _score_variant(query: str, card: TcgCard) -> float:
+    if not re.search(r"[a-z]", query):
+        return 0
+
     name = _normalize(card.name)
-    search_text = _normalize(card.search_text)
     score = max(
-        fuzz.partial_ratio(name, query),
         fuzz.WRatio(name, query),
-        fuzz.token_set_ratio(search_text, query) * 0.95,
+        fuzz.token_set_ratio(name, query),
     )
 
     if name and name in query:
         score += 12
-    if _number_matches(query, card.number):
+    elif query and query in name and len(query) >= 4:
+        score += 6
+    if _number_matches(query, card.number) and _has_card_identity_signal(query, card):
         score += 8
     if card.set_code and _normalize(card.set_code) in query:
         score += 4
     if card.set_name and _normalize(card.set_name) in query:
         score += 4
 
-    return min(score, 99)
+    return score
 
 
 def _number_matches(query: str, number: str) -> bool:
@@ -384,6 +423,17 @@ def _number_matches(query: str, number: str) -> bool:
         return False
     query_numbers = {token.lstrip("0") for token in re.findall(r"\b\d+[a-z]?\b", query)}
     return normalized_number in query_numbers
+
+
+def _has_card_identity_signal(query: str, card: TcgCard) -> bool:
+    name = _normalize(card.name)
+    set_name = _normalize(card.set_name)
+    set_code = _normalize(card.set_code)
+    return bool(
+        (name and max(fuzz.WRatio(name, query), fuzz.token_set_ratio(name, query)) >= 70)
+        or (set_name and set_name in query)
+        or (set_code and set_code in query)
+    )
 
 
 def best_local_candidate(query: str) -> ScanCandidate:

@@ -65,7 +65,13 @@ def test_fuzzy_match_handles_card_names() -> None:
 
 def test_loads_pokemon_tcg_data_catalog_shape(tmp_path: Path) -> None:
     cards_dir = tmp_path / "cards" / "en"
+    sets_dir = tmp_path / "sets"
     cards_dir.mkdir(parents=True)
+    sets_dir.mkdir()
+    (sets_dir / "en.json").write_text(
+        json.dumps([{"id": "base1", "name": "Base"}]),
+        encoding="utf-8",
+    )
     (cards_dir / "base1.json").write_text(
         json.dumps(
             [
@@ -76,6 +82,13 @@ def test_loads_pokemon_tcg_data_catalog_shape(tmp_path: Path) -> None:
                     "number": "4",
                     "rarity": "Rare Holo",
                     "images": {"small": "https://images.pokemontcg.io/base1/4.png"},
+                },
+                {
+                    "id": "base1-58",
+                    "name": "Pikachu",
+                    "number": "58",
+                    "rarity": "Common",
+                    "images": {"small": "https://images.pokemontcg.io/base1/58.png"},
                 },
                 {
                     "id": "base1-10",
@@ -93,9 +106,11 @@ def test_loads_pokemon_tcg_data_catalog_shape(tmp_path: Path) -> None:
     catalog = load_catalog_from_path(str(tmp_path))
     candidates = top_catalog_candidates("charzard base set 4", catalog)
 
-    assert len(catalog) == 2
+    assert len(catalog) == 3
     assert candidates[0].name == "Charizard"
     assert candidates[0].image_url == "https://images.pokemontcg.io/base1/4.png"
+    assert next(card for card in catalog if card.id == "base1-58").set_name == "Base"
+    assert next(card for card in catalog if card.id == "base1-58").set_code == "base1"
 
 
 def test_catalog_match_prefers_title_line_over_noisy_text() -> None:
@@ -153,3 +168,117 @@ def test_catalog_match_uses_card_number_to_disambiguate() -> None:
     candidates = top_catalog_candidates("Charizard 4/102", catalog)
 
     assert candidates[0].id == "base1-4"
+
+
+def test_catalog_match_does_not_prefer_attack_damage_numbers() -> None:
+    catalog = [
+        TcgCard(
+            id="base1-10",
+            name="Mewtwo",
+            set_name="Base Set",
+            set_code="base1",
+            number="10",
+            rarity="Rare Holo",
+            image_url=None,
+        ),
+        TcgCard(
+            id="base1-30",
+            name="Ivysaur",
+            set_name="Base Set",
+            set_code="base1",
+            number="30",
+            rarity="Uncommon",
+            image_url=None,
+        ),
+        TcgCard(
+            id="base1-58",
+            name="Pikachu",
+            set_name="Base Set",
+            set_code="base1",
+            number="58",
+            rarity="Common",
+            image_url=None,
+        ),
+    ]
+
+    candidates = top_catalog_candidates(
+        "\n".join(
+            [
+                "Basic Pokémen",
+                "Pikachu",
+                "40 HP",
+                "10",
+                "Gnaw",
+                "Thunder Jolt Flip a coin. If tails,",
+                "30",
+                "Pikachu does 10 damage to itself.",
+            ]
+        ),
+        catalog,
+    )
+
+    assert candidates[0].id == "base1-58"
+
+
+def test_catalog_match_prefers_ex_title_over_noisy_full_art_text() -> None:
+    catalog = [
+        TcgCard(
+            id="base1-1",
+            name="Alakazam",
+            set_name="Base",
+            set_code="base1",
+            number="1",
+            rarity="Rare Holo",
+            image_url=None,
+        ),
+        TcgCard(
+            id="det1-9",
+            name="Greninja",
+            set_name="Detective Pikachu",
+            set_code="det1",
+            number="9",
+            rarity="Rare Ultra",
+            image_url=None,
+        ),
+        TcgCard(
+            id="sv6-214",
+            name="Greninja ex",
+            set_name="Twilight Masquerade",
+            set_code="sv6",
+            number="214",
+            rarity="Special Illustration Rare",
+            image_url=None,
+        ),
+        TcgCard(
+            id="me4-22",
+            name="Mega Greninja ex",
+            set_name="Chaos Rising",
+            set_code="me4",
+            number="22",
+            rarity="Double Rare",
+            image_url=None,
+        ),
+    ]
+
+    candidates = top_catalog_candidates(
+        "\n".join(
+            [
+                "greninja ex 214 167",
+                "STAGE2",
+                "Greninja ex",
+                "HP 310",
+                "Tera",
+                "Evolves from Erogadier",
+                "M",
+                "S",
+                "Shinobi Blade",
+                "170",
+                "Mirage Barrage",
+                "120 damage to 2 of your opponent's Pokémon.",
+                "Pokémon ex rule",
+            ]
+        ),
+        catalog,
+    )
+
+    assert candidates[0].id == "sv6-214"

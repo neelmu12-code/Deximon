@@ -1,3 +1,4 @@
+import re
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 from pathlib import Path
@@ -65,6 +66,20 @@ async def _read_image(file: UploadFile) -> bytes:
     return await file.read()
 
 
+def _filename_query(filename: str | None) -> str:
+    stem = Path(filename or "").stem
+    normalized = re.sub(r"[^A-Za-z0-9]+", " ", stem).strip().lower()
+    words = [
+        word
+        for word in normalized.split()
+        if word not in {"card", "image", "img", "photo", "scan", "upload"}
+        and not re.fullmatch(r"\d+x\d+", word)
+    ]
+    if not any(re.search(r"[a-z]", word) for word in words):
+        return ""
+    return " ".join(words[:8])
+
+
 @app.post("/scan/mock", response_model=ScanResponse)
 async def scan_mock(
     file: ImageUpload,
@@ -117,7 +132,8 @@ async def scan_card(
             detail="Scanner OCR provider failed.",
         ) from exc
 
-    query = "\n".join(lines).strip() or settings.scanner_mock_default_query
+    query_parts = [_filename_query(file.filename), *lines]
+    query = "\n".join(part for part in query_parts if part).strip() or settings.scanner_mock_default_query
     catalog_cards = load_catalog(settings)
     if catalog_cards:
         candidates = top_catalog_candidates(query, catalog_cards)
