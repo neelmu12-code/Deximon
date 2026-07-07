@@ -25,6 +25,13 @@ type ScanCandidate = {
   confidence: number;
 };
 
+type ScanResponse = {
+  candidate?: ScanCandidate;
+  candidates?: ScanCandidate[];
+  source?: string;
+  ocr_text?: string[];
+};
+
 type OwnedCard = {
   id: string;
   name: string;
@@ -40,6 +47,7 @@ type SavedCard = {
 
 const ALLOWED_TYPES = new Set(["image/jpeg", "image/png", "image/webp"]);
 const ALLOWED_EXTENSIONS = [".jpg", ".jpeg", ".png", ".webp"];
+const LOW_CONFIDENCE = 0.55;
 
 const MOCK_CANDIDATES: ScanCandidate[] = [
   {
@@ -105,6 +113,7 @@ function normalizeCandidate(payload: unknown): ScanCandidate {
   }
 
   return {
+    id: data.id ? String(data.id) : undefined,
     name: String(data.name),
     set_name: String(data.set_name),
     set_code: data.set_code ? String(data.set_code) : null,
@@ -113,6 +122,43 @@ function normalizeCandidate(payload: unknown): ScanCandidate {
     image_url: data.image_url ? String(data.image_url) : null,
     confidence: Number(data.confidence),
   };
+}
+
+function normalizeCandidates(payload: unknown): ScanCandidate[] {
+  const response = payload as Partial<ScanResponse> | null;
+  const rawCandidates =
+    response && typeof response === "object" && Array.isArray(response.candidates)
+      ? response.candidates
+      : [normalizeCandidate(payload)];
+
+  return rawCandidates
+    .map((rawCandidate) => normalizeCandidate(rawCandidate))
+    .sort((a, b) => b.confidence - a.confidence);
+}
+
+function scanSource(payload: unknown): string | null {
+  if (payload && typeof payload === "object" && "source" in payload) {
+    return String((payload as { source: unknown }).source);
+  }
+  return null;
+}
+
+function scanOcrText(payload: unknown): string[] {
+  if (!payload || typeof payload !== "object" || !("ocr_text" in payload)) return [];
+  const rawLines = (payload as { ocr_text: unknown }).ocr_text;
+  if (!Array.isArray(rawLines)) return [];
+  return rawLines.map((line) => String(line)).filter(Boolean);
+}
+
+function shouldUseMockFallback(error: unknown): boolean {
+  if (!(error instanceof ApiError)) return true;
+  return [404, 405, 503].includes(error.status);
+}
+
+function confidenceClass(confidence: number): string {
+  if (confidence < LOW_CONFIDENCE) return "text-dx-red";
+  if (confidence < 0.75) return "text-dx-gold";
+  return "text-dx-green";
 }
 
 function identityFromCandidate(candidate: ScanCandidate): CardIdentity {
@@ -162,12 +208,15 @@ export function ScannerUploadFlow() {
   const [scanning, setScanning] = useState(false);
   const [saving, setSaving] = useState(false);
   const [candidate, setCandidate] = useState<ScanCandidate | null>(null);
+  const [candidates, setCandidates] = useState<ScanCandidate[]>([]);
   const [identity, setIdentity] = useState<CardIdentity | null>(null);
   const [details, setDetails] = useState<CardDetails | null>(null);
   const [savedCards, setSavedCards] = useState<SavedCard[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
   const [mockNotice, setMockNotice] = useState<string | null>(null);
+  const [scanSourceLabel, setScanSourceLabel] = useState<string | null>(null);
+  const [ocrText, setOcrText] = useState<string[]>([]);
 
   // "Search manually instead" flow.
   const [showSearch, setShowSearch] = useState(false);
@@ -187,8 +236,9 @@ export function ScannerUploadFlow() {
 
   const canScan = useMemo(() => Boolean(selectedFile) && !scanning, [scanning, selectedFile]);
 
-  function applyCandidate(scanned: ScanCandidate) {
+  function applyCandidate(scanned: ScanCandidate, choices: ScanCandidate[] = [scanned]) {
     setCandidate(scanned);
+    setCandidates(choices);
     setIdentity(identityFromCandidate(scanned));
     setDetails(defaultDetails({ rarity: scanned.rarity }));
   }
@@ -197,9 +247,12 @@ export function ScannerUploadFlow() {
     setError(null);
     setSuccess(null);
     setCandidate(null);
+    setCandidates([]);
     setIdentity(null);
     setDetails(null);
     setMockNotice(null);
+    setScanSourceLabel(null);
+    setOcrText([]);
 
     if (!file) return;
     const validationError = validateImageFile(file);
@@ -221,14 +274,39 @@ export function ScannerUploadFlow() {
     try {
       const body = new FormData();
       body.append("file", selectedFile);
-      const response = await fetchAPI<unknown>("/scan/mock", { method: "POST", body });
-      applyCandidate(normalizeCandidate(response));
+      const response = await fetchAPI<unknown>("/scan", { method: "POST", body });
+      const choices = normalizeCandidates(response);
+      applyCandidate(choices[0], choices);
+      setScanSourceLabel(scanSource(response));
+      setOcrText(scanOcrText(response));
+      if (scanSource(response)?.includes("fallback")) {
+        setMockNotice("AWS OCR ran, but catalog matching fell back to local candidates. Please verify before saving.");
+      }
     } catch (scanError) {
-      if (scanError instanceof ApiError && ![404, 405].includes(scanError.status)) {
-        setError(messageFromError(scanError));
-      } else {
-        applyCandidate(mockCandidateForFile(selectedFile));
-        setMockNotice("Using temporary mock scan data because /scan/mock is not available yet.");
+      if (!shouldUseMockFallback(scanError)) {
+        setError(`Real scanner failed: ${messageFromError(scanError)}`);
+        return;
+      }
+
+      try {
+        const fallbackBody = new FormData();
+        fallbackBody.append("file", selectedFile);
+        const response = await fetchAPI<unknown>("/scan/mock", { method: "POST", body: fallbackBody });
+        const choices = normalizeCandidates(response);
+        applyCandidate(choices[0], choices);
+        setScanSourceLabel(scanSource(response));
+        setOcrText(scanOcrText(response));
+        setMockNotice(`Using local catalog scanner because real scan is unavailable: ${messageFromError(scanError)}`);
+      } catch (fallbackError) {
+        if (fallbackError instanceof ApiError && ![404, 405].includes(fallbackError.status)) {
+          setError(messageFromError(fallbackError));
+          return;
+        }
+        const fallback = mockCandidateForFile(selectedFile);
+        applyCandidate(fallback);
+        setScanSourceLabel("browser_local_fallback");
+        setOcrText([selectedFile.name]);
+        setMockNotice("Using temporary local scan data because scanner endpoints are not available yet.");
       }
     } finally {
       setScanning(false);
@@ -371,6 +449,26 @@ export function ScannerUploadFlow() {
           {success}
         </div>
       )}
+      {(scanSourceLabel || ocrText.length > 0) && (
+        <div className="rounded-md border border-hair bg-surface px-3 py-2 text-sm text-ink2">
+          {scanSourceLabel && (
+            <div>
+              Scanner source: <span className="font-medium text-ink">{scanSourceLabel}</span>
+            </div>
+          )}
+          {ocrText.length > 0 && (
+            <details className="mt-1">
+              <summary className="cursor-pointer text-ink3">Show OCR text</summary>
+              <pre className="mt-2 max-h-28 overflow-auto whitespace-pre-wrap break-words rounded bg-surface2 p-2 text-[11px] text-ink3">{ocrText.join("\n")}</pre>
+            </details>
+          )}
+        </div>
+      )}
+      {candidate && candidate.confidence < LOW_CONFIDENCE && (
+        <div className="rounded-md border border-dx-gold/40 bg-dx-gold/10 px-3 py-2 text-sm text-dx-gold">
+          Low confidence scan. Pick another candidate below or use manual search before saving.
+        </div>
+      )}
 
       {candidate && identity && details && (
         <div className="grid gap-5 lg:grid-cols-[280px_1fr]">
@@ -400,9 +498,42 @@ export function ScannerUploadFlow() {
               </div>
               <div className="flex justify-between gap-3">
                 <dt className="text-ink3">Confidence</dt>
-                <dd className="font-medium text-dx-green text-right">{Math.round(candidate.confidence * 100)}%</dd>
+                <dd className={`font-medium text-right ${confidenceClass(candidate.confidence)}`}>
+                  {Math.round(candidate.confidence * 100)}%
+                </dd>
               </div>
             </dl>
+            {candidates.length > 1 && (
+              <div className="mt-4 border-t border-hair pt-4">
+                <div className="mb-2 text-[11px] uppercase tracking-[0.22em] text-ink3">
+                  Other matches
+                </div>
+                <div className="space-y-2">
+                  {candidates.slice(0, 3).map((choice) => (
+                    <button
+                      key={`${choice.id ?? choice.name}-${choice.number}`}
+                      type="button"
+                      onClick={() => applyCandidate(choice, candidates)}
+                      className={`w-full rounded-md border px-3 py-2 text-left text-sm transition-colors ${
+                        choice === candidate
+                          ? "border-dx-red bg-dx-red/10"
+                          : "border-hair bg-surface2 hover:border-ink3"
+                      }`}
+                    >
+                      <div className="flex items-center justify-between gap-3">
+                        <span className="font-medium text-ink">{choice.name}</span>
+                        <span className={confidenceClass(choice.confidence)}>
+                          {Math.round(choice.confidence * 100)}%
+                        </span>
+                      </div>
+                      <div className="text-[12px] text-ink3">
+                        {choice.set_name} - {choice.number}
+                      </div>
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
           </div>
 
           <form

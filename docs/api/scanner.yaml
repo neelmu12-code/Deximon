@@ -24,7 +24,7 @@ paths:
   /scan/mock:
     post:
       summary: Local mock scanner
-      description: Accepts a jpg, jpeg, png, or webp image and returns a deterministic local fuzzy-matched Pokemon card candidate without AWS.
+      description: Accepts a jpg, jpeg, png, or webp image and returns fuzzy-matched Pokemon card candidates without AWS. Uses the mounted PokemonTCG/pokemon-tcg-data catalog when available, then falls back to the small local mock list.
       requestBody:
         required: true
         content:
@@ -53,7 +53,7 @@ paths:
   /scan:
     post:
       summary: AWS-backed scanner
-      description: Preprocesses an image, uploads it to S3, runs Rekognition OCR, and fuzzy matches OCR text to Pokemon TCG cards. Returns 503 until AWS/S3 is configured.
+      description: Preprocesses an image, uploads it to S3, runs Rekognition OCR, and fuzzy matches OCR text to Pokemon TCG cards from the mounted PokemonTCG/pokemon-tcg-data catalog. Returns 503 until AWS/S3 is configured.
       requestBody:
         required: true
         content:
@@ -117,10 +117,14 @@ components:
           maximum: 1
     ScanResponse:
       type: object
-      required: [candidate, image, source, ocr_text]
+      required: [candidate, candidates, image, source, ocr_text]
       properties:
         candidate:
           $ref: "#/components/schemas/ScanCandidate"
+        candidates:
+          type: array
+          items:
+            $ref: "#/components/schemas/ScanCandidate"
         image:
           $ref: "#/components/schemas/ImageInfo"
         source:

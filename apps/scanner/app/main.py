@@ -1,3 +1,5 @@
+from collections.abc import AsyncIterator
+from contextlib import asynccontextmanager
 from pathlib import Path
 from typing import Annotated
 
@@ -8,9 +10,20 @@ from app.aws import detect_text_from_s3, upload_scan_image
 from app.config import Settings, get_settings
 from app.image_processing import ProcessedImage, preprocess_image
 from app.schemas import ImageInfo, ScanResponse
-from app.tcg import best_local_candidate, card_to_candidate, fuzzy_match, lookup_cards
+from app.tcg import load_catalog, lookup_cards, top_catalog_candidates, top_local_candidates
 
-app = FastAPI(title="Deximon Scanner", version="0.1.0")
+
+@asynccontextmanager
+async def lifespan(_app: FastAPI) -> AsyncIterator[None]:
+    catalog_count = len(load_catalog(get_settings()))
+    if catalog_count:
+        print(f"Loaded {catalog_count} Pokemon TCG cards from local catalog.")
+    else:
+        print("Pokemon TCG local catalog not found; scanner will use API/mock fallback.")
+    yield
+
+
+app = FastAPI(title="Deximon Scanner", version="0.1.0", lifespan=lifespan)
 ImageUpload = Annotated[UploadFile, File(...)]
 SettingsDep = Annotated[Settings, Depends(get_settings)]
 MockQuery = Annotated[str | None, Form()]
@@ -68,10 +81,14 @@ async def scan_mock(
     if not query.strip():
         query = settings.scanner_mock_default_query
 
+    catalog_cards = load_catalog(settings)
+    source = "local_catalog" if catalog_cards else "local_mock"
+    candidates = top_catalog_candidates(query, catalog_cards) if catalog_cards else top_local_candidates(query)
     return ScanResponse(
-        candidate=best_local_candidate(query),
+        candidate=candidates[0],
+        candidates=candidates,
         image=_image_info(processed),
-        source="local_mock",
+        source=source,
         ocr_text=[query],
     )
 
@@ -100,18 +117,28 @@ async def scan_card(
             detail="Scanner OCR provider failed.",
         ) from exc
 
-    query = " ".join(lines).strip() or settings.scanner_mock_default_query
-    try:
-        cards = lookup_cards(query, settings)
-        card, confidence = fuzzy_match(query, cards)
-        candidate = card_to_candidate(card, confidence)
-    except (httpx.HTTPError, ValueError):
-        candidate = best_local_candidate(query)
+    query = "\n".join(lines).strip() or settings.scanner_mock_default_query
+    catalog_cards = load_catalog(settings)
+    if catalog_cards:
+        candidates = top_catalog_candidates(query, catalog_cards)
+        source = "aws_rekognition_local_catalog"
+    else:
+        source = "aws_rekognition_api"
+        try:
+            cards = lookup_cards(query, settings)
+            candidates = top_catalog_candidates(query, cards)
+        except (httpx.HTTPError, ValueError):
+            candidates = top_local_candidates(query)
+            source = "aws_rekognition_catalog_fallback"
+    if not candidates:
+        candidates = top_local_candidates(query)
+        source = "aws_rekognition_catalog_fallback"
 
     return ScanResponse(
-        candidate=candidate,
+        candidate=candidates[0],
+        candidates=candidates,
         image=_image_info(processed),
-        source="aws_rekognition",
+        source=source,
         ocr_text=lines,
         image_key=image_key,
     )

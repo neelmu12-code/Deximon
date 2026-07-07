@@ -59,6 +59,7 @@ services:
       - "8001:8001"
     volumes:
       - ./apps/scanner:/app
+      - ./data/pokemon-tcg-data:/data/pokemon-tcg-data:ro
 
   web:
     build:

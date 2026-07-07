@@ -22,6 +22,7 @@ class ScanCandidate(BaseModel):
 
 class ScanResponse(BaseModel):
     candidate: ScanCandidate
+    candidates: list[ScanCandidate] = Field(default_factory=list)
     image: ImageInfo
     source: str
     ocr_text: list[str] = Field(default_factory=list)

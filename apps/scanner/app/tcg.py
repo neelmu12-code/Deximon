@@ -1,8 +1,13 @@
+import json
+import re
 from collections.abc import Iterable
 from dataclasses import dataclass
+from functools import lru_cache
+from pathlib import Path
+from typing import cast
 
 import httpx
-from rapidfuzz import fuzz, process
+from rapidfuzz import fuzz
 
 from app.config import Settings
 from app.schemas import ScanCandidate
@@ -43,6 +48,33 @@ MOCK_CARDS = [
         image_url="https://images.pokemontcg.io/base1/4.png",
     ),
     TcgCard(
+        id="xy2-13",
+        name="Charizard-EX",
+        set_name="Flashfire",
+        set_code="xy2",
+        number="13",
+        rarity="Rare Holo EX",
+        image_url="https://images.pokemontcg.io/xy2/13.png",
+    ),
+    TcgCard(
+        id="xy2-69",
+        name="M Charizard-EX",
+        set_name="Flashfire",
+        set_code="xy2",
+        number="69",
+        rarity="Rare Holo EX",
+        image_url="https://images.pokemontcg.io/xy2/69.png",
+    ),
+    TcgCard(
+        id="pgo-10",
+        name="Charizard",
+        set_name="Pokemon GO",
+        set_code="pgo",
+        number="10",
+        rarity="Rare Holo",
+        image_url="https://images.pokemontcg.io/pgo/10.png",
+    ),
+    TcgCard(
         id="base1-10",
         name="Mewtwo",
         set_name="Base Set",
@@ -62,18 +94,71 @@ MOCK_CARDS = [
     ),
 ]
 
+_STOP_WORDS = {
+    "ability",
+    "attack",
+    "basic",
+    "card",
+    "damage",
+    "defending",
+    "does",
+    "during",
+    "energy",
+    "evolves",
+    "from",
+    "game",
+    "holo",
+    "hp",
+    "illustrator",
+    "into",
+    "length",
+    "no",
+    "pokemon",
+    "resistance",
+    "retreat",
+    "stage",
+    "this",
+    "weak",
+    "weakness",
+    "weight",
+    "your",
+}
+_KNOWN_NAME_HINTS = [
+    "charizard",
+    "pikachu",
+    "mewtwo",
+    "blastoise",
+    "venusaur",
+    "mew",
+    "rayquaza",
+    "lugia",
+    "gengar",
+    "dragonite",
+    "gyarados",
+    "eevee",
+    "lucario",
+]
+
 
 def fuzzy_match(query: str, cards: Iterable[TcgCard]) -> tuple[TcgCard, float]:
-    candidates = list(cards)
+    candidates = top_fuzzy_matches(query, cards, limit=1)
     if not candidates:
         raise ValueError("No card candidates are available.")
+    return candidates[0]
 
-    choices = {card.search_text: card for card in candidates}
-    match = process.extractOne(query, choices.keys(), scorer=fuzz.WRatio)
-    if match is None:
-        return candidates[0], 0.25
-    text, score, _ = match
-    return choices[text], max(0.25, min(score / 100, 0.99))
+
+def top_fuzzy_matches(query: str, cards: Iterable[TcgCard], limit: int = 3) -> list[tuple[TcgCard, float]]:
+    candidates = list(cards)
+    if not candidates:
+        return []
+
+    query_variants = _query_variants(query)
+    scored = [(card, _score_card(query_variants, card)) for card in candidates]
+    scored.sort(key=lambda item: item[1], reverse=True)
+    matches = [(card, score) for card, score in scored[:limit] if score > 0]
+    if not matches and candidates:
+        return [(candidates[0], 0.25)]
+    return [(card, max(0.25, min(score, 0.99))) for card, score in matches]
 
 
 def card_to_candidate(card: TcgCard, confidence: float) -> ScanCandidate:
@@ -90,35 +175,224 @@ def card_to_candidate(card: TcgCard, confidence: float) -> ScanCandidate:
 
 
 def lookup_cards(query: str, settings: Settings, limit: int = 10) -> list[TcgCard]:
-    params = {
-        "q": f'name:"{query}*"',
-        "pageSize": str(limit),
-        "select": "id,name,set,number,rarity,images",
-    }
+    queries = _catalog_queries(query)
     headers = {"X-Api-Key": settings.pokemon_tcg_api_key} if settings.pokemon_tcg_api_key else {}
-    with httpx.Client(timeout=8) as client:
-        response = client.get(f"{settings.pokemon_tcg_api_url.rstrip('/')}/cards", params=params, headers=headers)
-        response.raise_for_status()
-        payload = response.json()
+    cards_by_id: dict[str, TcgCard] = {}
 
-    cards: list[TcgCard] = []
-    for item in payload.get("data", []):
-        card_set = item.get("set") or {}
-        images = item.get("images") or {}
-        cards.append(
-            TcgCard(
-                id=str(item.get("id", "")),
-                name=str(item.get("name", "")),
-                set_name=str(card_set.get("name", "")),
-                set_code=str(card_set.get("id", "")),
-                number=str(item.get("number", "")),
-                rarity=item.get("rarity"),
-                image_url=images.get("small") or images.get("large"),
+    with httpx.Client(timeout=8) as client:
+        for catalog_query in queries:
+            params = {
+                "q": catalog_query,
+                "pageSize": str(limit),
+                "select": "id,name,set,number,rarity,images",
+            }
+            response = client.get(
+                f"{settings.pokemon_tcg_api_url.rstrip('/')}/cards",
+                params=params,
+                headers=headers,
             )
-        )
-    return [card for card in cards if card.id and card.name]
+            response.raise_for_status()
+            payload = response.json()
+
+            for item in _iter_card_json(payload):
+                card = _card_from_json(item)
+                if card:
+                    cards_by_id[card.id] = card
+            if len(cards_by_id) >= limit:
+                break
+
+    return list(cards_by_id.values())
+
+
+def load_catalog(settings: Settings) -> list[TcgCard]:
+    return load_catalog_from_path(settings.pokemon_tcg_data_dir)
+
+
+@lru_cache(maxsize=4)
+def load_catalog_from_path(data_dir: str) -> list[TcgCard]:
+    cards_dir = _resolve_cards_dir(Path(data_dir))
+    if cards_dir is None:
+        return []
+
+    cards_by_id: dict[str, TcgCard] = {}
+    for path in sorted(cards_dir.glob("*.json")):
+        try:
+            payload = json.loads(path.read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError):
+            continue
+
+        for item in _iter_card_json(payload):
+            card = _card_from_json(item)
+            if card:
+                cards_by_id[card.id] = card
+
+    return list(cards_by_id.values())
+
+
+def _resolve_cards_dir(data_dir: Path) -> Path | None:
+    candidates = [data_dir, data_dir / "cards" / "en"]
+    for candidate in candidates:
+        if candidate.is_dir() and any(candidate.glob("*.json")):
+            return candidate
+    return None
+
+
+def _iter_card_json(payload: object) -> Iterable[dict[str, object]]:
+    if isinstance(payload, list):
+        items = payload
+    elif isinstance(payload, dict):
+        data = payload.get("data")
+        items = data if isinstance(data, list) else []
+    else:
+        items = []
+
+    for item in items:
+        if isinstance(item, dict):
+            yield cast("dict[str, object]", item)
+
+
+def _card_from_json(item: dict[str, object]) -> TcgCard | None:
+    card_id = _required_str(item.get("id"))
+    name = _required_str(item.get("name"))
+    if not card_id or not name:
+        return None
+
+    card_set = _as_dict(item.get("set"))
+    images = _as_dict(item.get("images"))
+    return TcgCard(
+        id=card_id,
+        name=name,
+        set_name=_required_str(card_set.get("name")),
+        set_code=_required_str(card_set.get("id")),
+        number=_required_str(item.get("number")),
+        rarity=_optional_str(item.get("rarity")),
+        image_url=_optional_str(images.get("small")) or _optional_str(images.get("large")),
+    )
+
+
+def _as_dict(value: object) -> dict[str, object]:
+    if isinstance(value, dict):
+        return cast("dict[str, object]", value)
+    return {}
+
+
+def _required_str(value: object) -> str:
+    return str(value or "").strip()
+
+
+def _optional_str(value: object) -> str | None:
+    text = _required_str(value)
+    return text or None
+
+
+def _catalog_queries(query: str) -> list[str]:
+    normalized = re.sub(r"[^A-Za-z0-9 ./-]+", " ", query).strip()
+    words = [word.lower() for word in re.findall(r"[A-Za-z][A-Za-z0-9-]{2,}", normalized)]
+
+    queries: list[str] = []
+    for hint in _KNOWN_NAME_HINTS:
+        if hint in words or hint in normalized.lower():
+            queries.append(f"name:{hint}*")
+
+    title_phrases = [
+        phrase.strip()
+        for phrase in re.split(r"[\n\r]+| {2,}", normalized)
+        if 3 <= len(phrase.strip()) <= 40
+    ]
+    for phrase in title_phrases[:4]:
+        clean = " ".join(word for word in phrase.split() if word.lower() not in _STOP_WORDS)
+        if clean:
+            queries.append(f'name:"{clean}*"')
+
+    for word in words:
+        if word not in _STOP_WORDS and len(word) >= 4:
+            queries.append(f"name:{word}*")
+
+    if not queries and normalized:
+        queries.append(f'name:"{normalized[:40]}*"')
+
+    # Preserve order while removing duplicates.
+    return list(dict.fromkeys(queries))[:8]
+
+
+def _signal_query(query: str) -> str:
+    normalized = _normalize(query)
+    words = [
+        word
+        for word in re.findall(r"[a-z0-9][a-z0-9-]{1,}", normalized)
+        if word not in _STOP_WORDS
+    ]
+    for hint in _KNOWN_NAME_HINTS:
+        if hint in normalized and hint not in words:
+            words.append(hint)
+    return " ".join(words) or normalized
+
+
+def _query_variants(query: str) -> list[str]:
+    raw_lines = [line.strip() for line in re.split(r"[\n\r]+", query) if line.strip()]
+    variants: list[str] = []
+
+    for line in raw_lines[:4]:
+        # The card name usually appears before HP/type text on the first few OCR lines.
+        titleish = re.split(r"\b(?:hp|stage|basic|evolves from)\b", line, maxsplit=1, flags=re.I)[0]
+        variants.append(_signal_query(titleish))
+
+    variants.extend(_signal_query(line) for line in raw_lines[:8])
+    variants.append(_signal_query(query))
+
+    normalized = _normalize(query)
+    variants.extend(hint for hint in _KNOWN_NAME_HINTS if hint in normalized)
+
+    return [variant for variant in dict.fromkeys(variants) if variant]
+
+
+def _normalize(value: str) -> str:
+    return re.sub(r"\s+", " ", re.sub(r"[^a-z0-9/-]+", " ", value.lower())).strip()
+
+
+def _score_card(query_variants: Iterable[str], card: TcgCard) -> float:
+    scores = [_score_variant(variant, card) for variant in query_variants]
+    if not scores:
+        return 0.25
+    return min(max(scores) / 100, 0.99)
+
+
+def _score_variant(query: str, card: TcgCard) -> float:
+    name = _normalize(card.name)
+    search_text = _normalize(card.search_text)
+    score = max(
+        fuzz.partial_ratio(name, query),
+        fuzz.WRatio(name, query),
+        fuzz.token_set_ratio(search_text, query) * 0.95,
+    )
+
+    if name and name in query:
+        score += 12
+    if _number_matches(query, card.number):
+        score += 8
+    if card.set_code and _normalize(card.set_code) in query:
+        score += 4
+    if card.set_name and _normalize(card.set_name) in query:
+        score += 4
+
+    return min(score, 99)
+
+
+def _number_matches(query: str, number: str) -> bool:
+    normalized_number = _normalize(number).lstrip("0")
+    if not normalized_number:
+        return False
+    query_numbers = {token.lstrip("0") for token in re.findall(r"\b\d+[a-z]?\b", query)}
+    return normalized_number in query_numbers
 
 
 def best_local_candidate(query: str) -> ScanCandidate:
-    card, confidence = fuzzy_match(query, MOCK_CARDS)
-    return card_to_candidate(card, confidence)
+    return top_local_candidates(query, limit=1)[0]
+
+
+def top_local_candidates(query: str, limit: int = 3) -> list[ScanCandidate]:
+    return [card_to_candidate(card, confidence) for card, confidence in top_fuzzy_matches(query, MOCK_CARDS, limit)]
+
+
+def top_catalog_candidates(query: str, cards: Iterable[TcgCard], limit: int = 3) -> list[ScanCandidate]:
+    return [card_to_candidate(card, confidence) for card, confidence in top_fuzzy_matches(query, cards, limit)]

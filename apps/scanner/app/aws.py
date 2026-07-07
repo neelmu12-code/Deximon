@@ -1,3 +1,4 @@
+from typing import Any, cast
 from uuid import uuid4
 
 import boto3
@@ -31,10 +32,18 @@ def detect_text_from_s3(settings: Settings, key: str) -> list[str]:
     response = rekognition.detect_text(
         Image={"S3Object": {"Bucket": settings.s3_bucket, "Name": key}}
     )
-    detections = response.get("TextDetections", [])
+    detections = cast("list[dict[str, Any]]", response.get("TextDetections", []))
     lines = [
-        str(item["DetectedText"])
-        for item in detections
-        if item.get("Type") == "LINE" and item.get("DetectedText")
+        str(item.get("DetectedText", "")).strip()
+        for item in sorted(detections, key=_text_position)
+        if item.get("Type") == "LINE"
+        and float(item.get("Confidence", 0)) >= settings.scanner_ocr_min_confidence
+        and item.get("DetectedText")
     ]
     return lines
+
+
+def _text_position(item: dict[str, Any]) -> tuple[float, float]:
+    geometry = cast("dict[str, Any]", item.get("Geometry") or {})
+    bounding_box = cast("dict[str, Any]", geometry.get("BoundingBox") or {})
+    return float(bounding_box.get("Top") or 0), float(bounding_box.get("Left") or 0)
