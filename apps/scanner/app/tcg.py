@@ -123,6 +123,7 @@ _STOP_WORDS = {
     "weight",
     "your",
 }
+_SPECIAL_NAME_TOKENS = {"ex", "gx", "v", "vmax", "vstar"}
 _KNOWN_NAME_HINTS = [
     "charizard",
     "pikachu",
@@ -137,6 +138,18 @@ _KNOWN_NAME_HINTS = [
     "gyarados",
     "eevee",
     "lucario",
+    "greninja",
+    "reshiram",
+    "zekrom",
+    "solgaleo",
+    "lunala",
+    "sylveon",
+    "gardevoir",
+    "umbreon",
+    "espeon",
+    "snorlax",
+    "machamp",
+    "alakazam",
 ]
 
 
@@ -373,6 +386,10 @@ def _query_variants(query: str) -> list[str]:
         titleish = re.split(r"\b(?:hp|stage|basic|evolves from)\b", line, maxsplit=1, flags=re.I)[0]
         variants.append(_signal_query(titleish))
 
+    for index, line in enumerate(raw_lines[:4]):
+        if index + 1 < len(raw_lines):
+            variants.append(_signal_query(f"{line} {raw_lines[index + 1]}"))
+
     variants.extend(_signal_query(line) for line in raw_lines[:8])
     variants.append(_signal_query(query))
 
@@ -383,7 +400,13 @@ def _query_variants(query: str) -> list[str]:
 
 
 def _normalize(value: str) -> str:
-    return re.sub(r"\s+", " ", re.sub(r"[^a-z0-9/-]+", " ", value.lower())).strip()
+    normalized = re.sub(r"[^a-z0-9]+", " ", value.lower())
+    normalized = re.sub(r"\be\s*x\b", " ex ", normalized)
+    normalized = re.sub(r"\bg\s*x\b", " gx ", normalized)
+    normalized = re.sub(r"\bv\s*max\b", " vmax ", normalized)
+    normalized = re.sub(r"\bv\s*star\b", " vstar ", normalized)
+    normalized = re.sub(r"\btag\s*team\b", " tagteam ", normalized)
+    return re.sub(r"\s+", " ", normalized).strip()
 
 
 def _score_card(query_variants: Iterable[str], card: TcgCard) -> float:
@@ -398,15 +421,20 @@ def _score_variant(query: str, card: TcgCard) -> float:
         return 0
 
     name = _normalize(card.name)
-    score = max(
+    name_similarity = max(
         fuzz.WRatio(name, query),
         fuzz.token_set_ratio(name, query),
     )
+    score = name_similarity
 
     if name and name in query:
         score += 12
     elif query and query in name and len(query) >= 4:
         score += 6
+
+    if name_similarity >= 70:
+        score += _special_token_score(query, name)
+
     if _number_matches(query, card.number) and _has_card_identity_signal(query, card):
         score += 8
     if card.set_code and _normalize(card.set_code) in query:
@@ -434,6 +462,24 @@ def _has_card_identity_signal(query: str, card: TcgCard) -> bool:
         or (set_name and set_name in query)
         or (set_code and set_code in query)
     )
+
+
+def _special_token_score(query: str, name: str) -> float:
+    query_tokens = _special_tokens(query)
+    if not query_tokens:
+        return 0
+
+    name_tokens = _special_tokens(name)
+    matching_tokens = query_tokens & name_tokens
+    missing_tokens = query_tokens - name_tokens
+    score = 10 * len(matching_tokens)
+    if missing_tokens:
+        score -= 16 * len(missing_tokens)
+    return score
+
+
+def _special_tokens(value: str) -> set[str]:
+    return {token for token in _normalize(value).split() if token in _SPECIAL_NAME_TOKENS}
 
 
 def best_local_candidate(query: str) -> ScanCandidate:

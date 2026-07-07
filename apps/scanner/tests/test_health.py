@@ -282,3 +282,93 @@ def test_catalog_match_prefers_ex_title_over_noisy_full_art_text() -> None:
     )
 
     assert candidates[0].id == "sv6-214"
+
+
+def test_catalog_match_prefers_gx_over_plain_name() -> None:
+    catalog = [
+        TcgCard(
+            id="base1-4",
+            name="Charizard",
+            set_name="Base",
+            set_code="base1",
+            number="4",
+            rarity="Rare Holo",
+            image_url=None,
+        ),
+        TcgCard(
+            id="sm3-20",
+            name="Charizard-GX",
+            set_name="Burning Shadows",
+            set_code="sm3",
+            number="20",
+            rarity="Rare Holo GX",
+            image_url=None,
+        ),
+    ]
+
+    candidates = top_catalog_candidates(
+        "Charizard GX\nHP 250\nCrimson Storm\n300",
+        catalog,
+    )
+
+    assert candidates[0].id == "sm3-20"
+
+
+def test_catalog_match_handles_spaced_gx_ocr() -> None:
+    catalog = [
+        TcgCard(
+            id="base1-4",
+            name="Charizard",
+            set_name="Base",
+            set_code="base1",
+            number="4",
+            rarity="Rare Holo",
+            image_url=None,
+        ),
+        TcgCard(
+            id="sm3-20",
+            name="Charizard-GX",
+            set_name="Burning Shadows",
+            set_code="sm3",
+            number="20",
+            rarity="Rare Holo GX",
+            image_url=None,
+        ),
+    ]
+
+    candidates = top_catalog_candidates(
+        "Charizard G X\nHP 250\nCrimson Storm",
+        catalog,
+    )
+
+    assert candidates[0].id == "sm3-20"
+
+
+def test_catalog_match_handles_tag_team_gx_names() -> None:
+    catalog = [
+        TcgCard(
+            id="base1-58",
+            name="Pikachu",
+            set_name="Base",
+            set_code="base1",
+            number="58",
+            rarity="Common",
+            image_url=None,
+        ),
+        TcgCard(
+            id="sm9-33",
+            name="Pikachu & Zekrom-GX",
+            set_name="Team Up",
+            set_code="sm9",
+            number="33",
+            rarity="Rare Holo GX",
+            image_url=None,
+        ),
+    ]
+
+    candidates = top_catalog_candidates(
+        "TAG TEAM\nPikachu Zekrom GX\nFull Blitz\n200",
+        catalog,
+    )
+
+    assert candidates[0].id == "sm9-33"
