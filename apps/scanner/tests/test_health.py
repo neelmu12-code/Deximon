@@ -220,6 +220,55 @@ def test_catalog_match_does_not_prefer_attack_damage_numbers() -> None:
     assert candidates[0].id == "base1-58"
 
 
+def test_catalog_match_uses_card_text_to_disambiguate_reprints() -> None:
+    catalog = [
+        TcgCard(
+            id="mcd21-25",
+            name="Pikachu",
+            set_name="McDonald's Collection 2021",
+            set_code="mcd21",
+            number="25",
+            rarity=None,
+            image_url=None,
+            ocr_text="Meal Time Growl Happy Meal Collection",
+        ),
+        TcgCard(
+            id="base1-58",
+            name="Pikachu",
+            set_name="Base",
+            set_code="base1",
+            number="58",
+            rarity="Common",
+            image_url=None,
+            ocr_text=(
+                "40 Mouse Pokémon Length 1'4 Weight 13 lbs Gnaw Thunder Jolt "
+                "Pikachu does 10 damage to itself Mitsuhiro Arita lightning storms"
+            ),
+        ),
+    ]
+
+    candidates = top_catalog_candidates(
+        "\n".join(
+            [
+                "Basic Pokémen",
+                "Pikachu",
+                "40 HP",
+                "Mouse Pokémon. Length: 1'4\". Weight: 13 lbs.",
+                "10",
+                "Gnaw",
+                "Thunder Jolt Flip a coin. If tails,",
+                "30",
+                "Pikachu does 10 damage to itself.",
+                "cause lightning storms. LV. 12 #25",
+                "the Mitsuhire Arita",
+            ]
+        ),
+        catalog,
+    )
+
+    assert candidates[0].id == "base1-58"
+
+
 def test_catalog_match_prefers_ex_title_over_noisy_full_art_text() -> None:
     catalog = [
         TcgCard(

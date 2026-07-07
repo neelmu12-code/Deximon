@@ -22,10 +22,11 @@ class TcgCard:
     number: str
     rarity: str | None
     image_url: str | None
+    ocr_text: str = ""
 
     @property
     def search_text(self) -> str:
-        return f"{self.name} {self.set_name} {self.set_code} {self.number}"
+        return f"{self.name} {self.set_name} {self.set_code} {self.number} {self.ocr_text}"
 
 
 MOCK_CARDS = [
@@ -316,6 +317,7 @@ def _card_from_json(
         number=_required_str(item.get("number")),
         rarity=_optional_str(item.get("rarity")),
         image_url=_optional_str(images.get("small")) or _optional_str(images.get("large")),
+        ocr_text=_catalog_ocr_text(item),
     )
 
 
@@ -332,6 +334,48 @@ def _required_str(value: object) -> str:
 def _optional_str(value: object) -> str | None:
     text = _required_str(value)
     return text or None
+
+
+def _catalog_ocr_text(item: dict[str, object]) -> str:
+    parts = [
+        _required_str(item.get("hp")),
+        _required_str(item.get("evolvesFrom")),
+        _required_str(item.get("artist")),
+        _required_str(item.get("flavorText")),
+    ]
+    parts.extend(_string_items(item.get("types")))
+    parts.extend(_string_items(item.get("subtypes")))
+    parts.extend(_string_items(item.get("rules")))
+    parts.extend(_named_text_items(item.get("attacks")))
+    parts.extend(_named_text_items(item.get("abilities")))
+    parts.extend(_named_text_items(item.get("weaknesses")))
+    parts.extend(_named_text_items(item.get("resistances")))
+    return " ".join(part for part in parts if part)
+
+
+def _string_items(value: object) -> list[str]:
+    if not isinstance(value, list):
+        return []
+    return [_required_str(item) for item in value if _required_str(item)]
+
+
+def _named_text_items(value: object) -> list[str]:
+    if not isinstance(value, list):
+        return []
+
+    parts: list[str] = []
+    for item in value:
+        if isinstance(item, str):
+            parts.append(item)
+            continue
+        if not isinstance(item, dict):
+            continue
+        data = cast("dict[str, object]", item)
+        for key in ("name", "text", "damage", "type", "value"):
+            text = _required_str(data.get(key))
+            if text:
+                parts.append(text)
+    return parts
 
 
 def _catalog_queries(query: str) -> list[str]:
@@ -410,10 +454,11 @@ def _normalize(value: str) -> str:
 
 
 def _score_card(query_variants: Iterable[str], card: TcgCard) -> float:
-    scores = [_score_variant(variant, card) for variant in query_variants]
+    variants = list(query_variants)
+    scores = [_score_variant(variant, card) for variant in variants]
     if not scores:
         return 0.25
-    return max(scores) / 100
+    return (max(scores) + _context_bonus(variants, card)) / 100
 
 
 def _score_variant(query: str, card: TcgCard) -> float:
@@ -443,6 +488,20 @@ def _score_variant(query: str, card: TcgCard) -> float:
         score += 4
 
     return score
+
+
+def _context_bonus(query_variants: Iterable[str], card: TcgCard) -> float:
+    variants = list(query_variants)
+    if not variants or not card.ocr_text:
+        return 0
+
+    query = max(variants, key=len)
+    name = _normalize(card.name)
+    if not name or fuzz.token_set_ratio(name, query) < 80:
+        return 0
+
+    context = _normalize(card.search_text)
+    return min(fuzz.token_set_ratio(context, query) * 0.22, 24)
 
 
 def _number_matches(query: str, number: str) -> bool:
