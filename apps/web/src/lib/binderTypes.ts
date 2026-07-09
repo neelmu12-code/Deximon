@@ -1,6 +1,7 @@
+import type { CardSlot } from "@/components/profile/BinderPreview";
 import type { BackendOwnedCard } from "@/lib/cardDetails";
 import { pokemonImageUrl } from "@/lib/cardDetails";
-export type { CardSlot } from "@/components/profile/BinderPreview";
+export type { CardSlot };
 
 export const COVER_COLORS = [
   { id: 'oxblood',  label: 'Oxblood',      a: '#3b0a0e', b: '#260608', c: '#150305' },

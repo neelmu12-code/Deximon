@@ -34,9 +34,10 @@ async function loadProfile(username: string): Promise<PublicProfile> {
 // Returns empty array if binder is private or anything goes wrong.
 async function loadBinder(username: string): Promise<CardSlot[][]> {
   try {
-    const data = await fetchAPI<BackendBinderResponse>(
+        const data = await fetchAPI<BackendBinderResponse>(
       `/binder/${encodeURIComponent(username)}`
     );
+    if (!data) return [];
     return mapBackendBinder(data);
   } catch {
     return [];
