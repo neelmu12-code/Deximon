@@ -161,6 +161,12 @@ _KNOWN_NAME_HINTS = [
     "scyther",
     "exeggcute",
 ]
+_M_PREFIX_NAME_RE = re.compile(
+    r"\bm(" + "|".join(re.escape(hint) for hint in sorted(_KNOWN_NAME_HINTS, key=len, reverse=True)) + r")\b"
+)
+_KNOWN_NAME_HINT_RE = re.compile(
+    r"\b(" + "|".join(re.escape(hint) for hint in sorted(_KNOWN_NAME_HINTS, key=len, reverse=True)) + r")\b"
+)
 _CONTEXT_STOP_WORDS = _STOP_WORDS | {
     "about",
     "after",
@@ -498,8 +504,7 @@ def _query_variants(query: str) -> list[str]:
 
 def _normalize(value: str) -> str:
     normalized = re.sub(r"[^a-z0-9]+", " ", value.lower())
-    for hint in _KNOWN_NAME_HINTS:
-        normalized = re.sub(rf"\bm{re.escape(hint)}\b", f"m {hint}", normalized)
+    normalized = _M_PREFIX_NAME_RE.sub(r"m \1", normalized)
     normalized = re.sub(r"\be\s*x\b", " ex ", normalized)
     normalized = re.sub(r"\bg\s*x\b", " gx ", normalized)
     normalized = re.sub(r"\bv\s*max\b", " vmax ", normalized)
@@ -757,7 +762,7 @@ def _name_evidence_level(query_variants: Iterable[str], card: TcgCard) -> int:
 
 def _known_name_hints(value: str) -> set[str]:
     normalized = _normalize(value)
-    return {hint for hint in _KNOWN_NAME_HINTS if hint in normalized}
+    return set(_KNOWN_NAME_HINT_RE.findall(normalized))
 
 
 def _query_special_tokens(query_variants: Iterable[str]) -> set[str]:
