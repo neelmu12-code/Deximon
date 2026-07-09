@@ -498,6 +498,8 @@ def _query_variants(query: str) -> list[str]:
 
 def _normalize(value: str) -> str:
     normalized = re.sub(r"[^a-z0-9]+", " ", value.lower())
+    for hint in _KNOWN_NAME_HINTS:
+        normalized = re.sub(rf"\bm{re.escape(hint)}\b", f"m {hint}", normalized)
     normalized = re.sub(r"\be\s*x\b", " ex ", normalized)
     normalized = re.sub(r"\bg\s*x\b", " gx ", normalized)
     normalized = re.sub(r"\bv\s*max\b", " vmax ", normalized)
@@ -522,6 +524,15 @@ def _score_variant(query: str, card: TcgCard) -> float:
         return 0
 
     name = _normalize(card.name)
+    query_specific_tokens = _specific_identity_tokens(query)
+    if not query_specific_tokens:
+        generic_score = 0
+        if _special_tokens(query) & _special_tokens(name):
+            generic_score += 10
+        if _form_tokens(query) & _form_tokens(name):
+            generic_score += 8
+        return generic_score
+
     name_similarity = max(
         fuzz.WRatio(name, query),
         fuzz.token_set_ratio(name, query),
@@ -536,6 +547,10 @@ def _score_variant(query: str, card: TcgCard) -> float:
     if name_similarity >= 70:
         score += _special_token_score(query, name)
         score += _form_token_score(query, name)
+
+    query_hints = _known_name_hints(query)
+    if query_hints and not (query_hints & _known_name_hints(card.name)):
+        score -= 36
 
     if _number_matches(query, card.number) and _has_card_identity_signal(query, card):
         score += 8
@@ -708,12 +723,20 @@ def _identity_tokens(value: str) -> set[str]:
     }
 
 
+def _specific_identity_tokens(value: str) -> set[str]:
+    return {
+        token
+        for token in _identity_tokens(value)
+        if token not in _SPECIAL_NAME_TOKENS and token not in _FORM_NAME_TOKENS and len(token) >= 3
+    }
+
+
 def _name_evidence_level(query_variants: Iterable[str], card: TcgCard) -> int:
     name_tokens = _identity_tokens(card.name)
     if not name_tokens:
         return 0
 
-    content_tokens = name_tokens - _SPECIAL_NAME_TOKENS
+    content_tokens = _specific_identity_tokens(card.name)
     best_level = 0
     name = _normalize(card.name)
     for variant in query_variants:
@@ -722,13 +745,19 @@ def _name_evidence_level(query_variants: Iterable[str], card: TcgCard) -> int:
             return 3
         if name_tokens.issubset(variant_tokens):
             return 3
-        if fuzz.token_set_ratio(name, variant) >= 92 or (
-            content_tokens and content_tokens.issubset(variant_tokens)
+        if content_tokens and (
+            content_tokens.issubset(variant_tokens)
+            or (content_tokens & variant_tokens and fuzz.token_set_ratio(name, variant) >= 92)
         ):
             best_level = max(best_level, 2)
         elif content_tokens & variant_tokens:
             best_level = max(best_level, 1)
     return best_level
+
+
+def _known_name_hints(value: str) -> set[str]:
+    normalized = _normalize(value)
+    return {hint for hint in _KNOWN_NAME_HINTS if hint in normalized}
 
 
 def _query_special_tokens(query_variants: Iterable[str]) -> set[str]:

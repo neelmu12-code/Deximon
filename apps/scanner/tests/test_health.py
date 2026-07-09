@@ -584,6 +584,49 @@ def test_catalog_match_prefers_mega_charizard_x_over_y_when_x_is_near_name() -> 
     assert candidates[0].id == "me2-130"
 
 
+def test_catalog_match_does_not_treat_mega_rule_as_set_identity() -> None:
+    catalog = [
+        TcgCard(
+            id="me1-36",
+            name="Mega Abomasnow ex",
+            set_name="Mega Evolution",
+            set_code="me1",
+            number="36",
+            rarity="Double Rare",
+            image_url=None,
+            ocr_text="Mega Evolution rule Ice Hammer Frost Barrier",
+        ),
+        TcgCard(
+            id="xy2-108",
+            name="M Charizard-EX",
+            set_name="Flashfire",
+            set_code="xy2",
+            number="108",
+            rarity="Rare Holo EX",
+            image_url=None,
+            ocr_text="Mega Evolution rule Wild Blaze",
+        ),
+    ]
+
+    candidates = top_catalog_candidates(
+        "\n".join(
+            [
+                "MEGA",
+                "MCharizard EX",
+                "Mega Evolution rule",
+                "When 1 of your Pokemon",
+                "becomes a Mega Evolution Pokemon",
+                "Wild Blaze",
+                "300",
+            ]
+        ),
+        catalog,
+    )
+
+    assert candidates[0].id == "xy2-108"
+    assert candidates[0].confidence > 0.55
+
+
 def test_catalog_match_does_not_treat_weakness_x_as_form_x() -> None:
     catalog = [
         TcgCard(
