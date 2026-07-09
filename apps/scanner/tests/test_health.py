@@ -498,6 +498,134 @@ def test_catalog_match_prefers_gx_over_plain_name() -> None:
     assert candidates[0].id == "sm3-20"
 
 
+def test_catalog_match_handles_split_gx_title_lines() -> None:
+    catalog = [
+        TcgCard(
+            id="cel25c-60",
+            name="Tapu Lele-GX",
+            set_name="Celebrations: Classic Collection",
+            set_code="cel25c",
+            number="60",
+            rarity="Classic Collection",
+            image_url=None,
+            ocr_text="Wonder Tag Energy Drive Tapu Cure GX",
+        ),
+        TcgCard(
+            id="smp-SM05",
+            name="Snorlax-GX",
+            set_name="SM Black Star Promos",
+            set_code="smp",
+            number="SM05",
+            rarity="Promo",
+            image_url=None,
+            ocr_text="Collapse Thunderous Snore Pulverizing Pancake GX Asleep",
+        ),
+    ]
+
+    candidates = top_catalog_candidates(
+        "\n".join(
+            [
+                "BASIC",
+                "Snorlax",
+                "GX",
+                "HP 190",
+                "Collapse",
+                "80",
+                "This Pokemon is now Asleep.",
+                "Thunderous Snore",
+                "Pulverizing Pancake GX",
+                "SM05",
+            ]
+        ),
+        catalog,
+    )
+
+    assert candidates[0].id == "smp-SM05"
+
+
+def test_catalog_match_prefers_mega_charizard_x_over_y_when_x_is_near_name() -> None:
+    catalog = [
+        TcgCard(
+            id="me2pt5-22",
+            name="Mega Charizard Y ex",
+            set_name="Ascended Heroes",
+            set_code="me2pt5",
+            number="22",
+            rarity="Mega Ultra Rare",
+            image_url=None,
+            ocr_text="The Mega Blaze Wing Heat Burn",
+        ),
+        TcgCard(
+            id="me2-130",
+            name="Mega Charizard X ex",
+            set_name="Phantasmal Flames",
+            set_code="me2",
+            number="130",
+            rarity="Mega Ultra Rare",
+            image_url=None,
+            ocr_text="Raging Blaze Charizard Spirit Link",
+        ),
+    ]
+
+    candidates = top_catalog_candidates(
+        "\n".join(
+            [
+                "Mega Charizard X ex HP 220",
+                "The Mega",
+                "Charizard",
+                "STAGE2",
+                "Evolves from Charmeleon",
+                "Raging Blaze",
+            ]
+        ),
+        catalog,
+    )
+
+    assert candidates[0].id == "me2-130"
+
+
+def test_catalog_match_does_not_treat_weakness_x_as_form_x() -> None:
+    catalog = [
+        TcgCard(
+            id="sv3-215",
+            name="Charizard ex",
+            set_name="Obsidian Flames",
+            set_code="sv3",
+            number="215",
+            rarity="Special Illustration Rare",
+            image_url=None,
+            ocr_text="Tera Brave Wing Explosive Vortex Charmeleon",
+        ),
+        TcgCard(
+            id="me2-130",
+            name="Mega Charizard X ex",
+            set_name="Phantasmal Flames",
+            set_code="me2",
+            number="130",
+            rarity="Mega Ultra Rare",
+            image_url=None,
+            ocr_text="Raging Blaze Mega Evolution",
+        ),
+    ]
+
+    candidates = top_catalog_candidates(
+        "\n".join(
+            [
+                "x",
+                "Reddit",
+                "STAGE2",
+                "HP 330",
+                "Charizard ex",
+                "Tera",
+                "Evolves from Charmeleon",
+            ]
+        ),
+        catalog,
+    )
+
+    assert candidates[0].id == "sv3-215"
+
+
 def test_catalog_match_handles_spaced_gx_ocr() -> None:
     catalog = [
         TcgCard(

@@ -125,6 +125,7 @@ _STOP_WORDS = {
     "your",
 }
 _SPECIAL_NAME_TOKENS = {"ex", "gx", "v", "vmax", "vstar", "mega"}
+_FORM_NAME_TOKENS = {"x", "y"}
 _MEGA_ALIAS_RE = re.compile(r"\bm\s+[a-z][a-z]{2,}")
 _KNOWN_NAME_HINTS = [
     "charizard",
@@ -534,6 +535,7 @@ def _score_variant(query: str, card: TcgCard) -> float:
 
     if name_similarity >= 70:
         score += _special_token_score(query, name)
+        score += _form_token_score(query, name)
 
     if _number_matches(query, card.number) and _has_card_identity_signal(query, card):
         score += 8
@@ -643,6 +645,20 @@ def _special_token_score(query: str, name: str) -> float:
     return score
 
 
+def _form_token_score(query: str, name: str) -> float:
+    query_forms = _query_form_tokens_near_name(query, name)
+    if not query_forms:
+        return 0
+
+    name_forms = _form_tokens(name)
+    matching_tokens = query_forms & name_forms
+    missing_tokens = query_forms - name_forms
+    score = 14 * len(matching_tokens)
+    if missing_tokens:
+        score -= 22 * len(missing_tokens) if name_forms else 6 * len(missing_tokens)
+    return score
+
+
 def _special_tokens(value: str) -> set[str]:
     normalized = _normalize(value)
     tokens = set(normalized.split())
@@ -650,6 +666,32 @@ def _special_tokens(value: str) -> set[str]:
     if _MEGA_ALIAS_RE.search(normalized):
         specials.add("mega")
     return specials
+
+
+def _form_tokens(value: str) -> set[str]:
+    return set(_normalize(value).split()) & _FORM_NAME_TOKENS
+
+
+def _query_form_tokens_near_name(query: str, name: str) -> set[str]:
+    tokens = _normalize(query).split()
+    name_content_tokens = {
+        token
+        for token in _normalize(name).split()
+        if len(token) >= 3
+        and token not in _STOP_WORDS
+        and token not in _SPECIAL_NAME_TOKENS
+        and token not in _FORM_NAME_TOKENS
+    }
+    if not tokens or not name_content_tokens:
+        return set()
+
+    forms: set[str] = set()
+    for index, token in enumerate(tokens):
+        if token not in name_content_tokens:
+            continue
+        nearby = tokens[max(0, index - 1) : min(len(tokens), index + 4)]
+        forms.update(token for token in nearby if token in _FORM_NAME_TOKENS)
+    return forms
 
 
 def _identity_tokens(value: str) -> set[str]:
