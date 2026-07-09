@@ -1,21 +1,21 @@
 "use client";
 
-import { useState, useCallback, useEffect } from "react";
-import { useRouter } from "next/navigation";
 import { useAuth } from "@/lib/auth";
 import { fetchAPI } from "@/lib/fetchAPI";
-import type { CardSlot, BinderCoverConfig } from "@/lib/binderTypes";
-import { DEFAULT_COVER } from "@/lib/binderTypes";
+import { useRouter } from "next/navigation";
+import { useCallback, useEffect, useState } from "react";
+// import type { CardSlot, BinderCoverConfig } from "@/lib/binderTypes";
+// import { DEFAULT_COVER } from "@/lib/binderTypes";
 import { BinderSpread } from "@/components/binder/BinderSpread";
-import { CoverEditorPanel } from "@/components/binder/CoverEditorPanel";
-import { ManualAddModal } from "@/components/binder/ManualAddModal";
-import { ConfirmCardModal } from "@/components/binder/ConfirmCardModal";
 import { CardDetailPanel } from "@/components/binder/CardDetailPanel";
+import { ConfirmCardModal } from "@/components/binder/ConfirmCardModal";
+import { CoverEditorPanel } from "@/components/binder/CoverEditorPanel";
 import { CoverThumb } from "@/components/binder/CoverThumb";
+import { ManualAddModal } from "@/components/binder/ManualAddModal";
+import type { BackendBinderResponse, BinderCoverConfig, CardSlot } from "@/lib/binderTypes";
+import { DEFAULT_COVER, mapBackendBinder, PLACEHOLDER_CARD_IMAGE } from "@/lib/binderTypes";
 import {
   defaultDetails,
-  pokemonImageUrl,
-  type BackendOwnedCard,
   type CardDetails,
   type SearchCard,
 } from "@/lib/cardDetails";
@@ -400,3 +400,4 @@ export default function BinderPage() {
     </div>
   );
 }
+

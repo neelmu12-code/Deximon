@@ -67,9 +67,7 @@ def _place_card_in_next_slot(db: Session, user_id: UUID, card_id: UUID) -> None:
     If every page is full, start a new page."""
     pages = list(
         db.scalars(
-            select(BinderPage)
-            .where(BinderPage.user_id == user_id)
-            .order_by(BinderPage.page_index)
+            select(BinderPage).where(BinderPage.user_id == user_id).order_by(BinderPage.page_index)
         )
     )
     if not pages:
@@ -118,9 +116,7 @@ def _get_or_create_page(db: Session, user_id: UUID, page_index: int) -> BinderPa
 def _binder_response(db: Session, user_id: UUID) -> BinderResponse:
     pages = list(
         db.scalars(
-            select(BinderPage)
-            .where(BinderPage.user_id == user_id)
-            .order_by(BinderPage.page_index)
+            select(BinderPage).where(BinderPage.user_id == user_id).order_by(BinderPage.page_index)
         )
     )
     if not pages:
@@ -134,11 +130,7 @@ def _binder_response(db: Session, user_id: UUID) -> BinderResponse:
         else []
     )
     card_ids = [slot.card_id for slot in slots if slot.card_id is not None]
-    cards = (
-        list(db.scalars(select(Card).where(Card.id.in_(card_ids))))
-        if card_ids
-        else []
-    )
+    cards = list(db.scalars(select(Card).where(Card.id.in_(card_ids)))) if card_ids else []
     cards_by_id = {card.id: card for card in cards}
     slots_by_page = {
         page.id: {slot.slot_index: slot for slot in slots if slot.page_id == page.id}
@@ -344,3 +336,27 @@ def move_binder_card(
 
     db.commit()
     return _binder_response(db, current_user.id)
+
+
+@router.get("/{username}", response_model=BinderResponse)
+def get_public_binder(username: str, db: DbSession) -> BinderResponse:
+    # Imported here
+    from sqlalchemy import func as sa_func
+
+    from app.models.user import User
+
+    # Find the user by username (case-insensitive)
+    user = db.scalar(
+        select(User).where(
+            sa_func.lower(User.username) == username.lower(), User.is_active.is_(True)
+        )
+    )
+    if user is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found")
+
+    # Block access if their binder is set to private
+    if not user.profile or not user.profile.binder_public:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="This binder is private")
+
+    # Reuse the exact same helper the personal binder uses
+    return _binder_response(db, user.id)

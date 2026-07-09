@@ -1,15 +1,17 @@
-import { Fragment } from "react";
 import Image from "next/image";
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { BinderPreview } from "@/components/profile/BinderPreview";
+import { Fragment } from "react";
+// import { BinderPreview } from "@/components/profile/BinderPreview";
+import { BinderPreview, type CardSlot } from "@/components/profile/BinderPreview";
 import { EditProfileButton } from "@/components/profile/EditProfileButton";
 import { ProfileReviews } from "@/components/profile/ProfileReviews";
 import { Avatar } from "@/components/ui/Avatar";
 import { Stars } from "@/components/ui/Stars";
+import type { PublicProfile } from "@/lib/auth";
+import { mapBackendBinder, type BackendBinderResponse } from "@/lib/binderTypes";
 import { ApiError, fetchAPI } from "@/lib/fetchAPI";
 import { avatarHue, userDisplayName } from "@/lib/userDisplay";
-import type { PublicProfile } from "@/lib/auth";
 
 // Binder teammate: fetch binder pages here and pass them to <BinderPreview pages={...} />.
 // Shape: CardSlot[][] — each inner array is one 9-slot page. Import CardSlot from
@@ -28,6 +30,18 @@ async function loadProfile(username: string): Promise<PublicProfile> {
     throw error;
   }
 }
+// Fetches the public binder for this profile.
+// Returns empty array if binder is private or anything goes wrong.
+async function loadBinder(username: string): Promise<CardSlot[][]> {
+  try {
+    const data = await fetchAPI<BackendBinderResponse>(
+      `/binder/${encodeURIComponent(username)}`
+    );
+    return mapBackendBinder(data);
+  } catch {
+    return [];
+  }
+}
 
 export async function generateMetadata({ params }: { params: Promise<Params> }) {
   const { username } = await params;
@@ -39,6 +53,7 @@ export default async function PublicProfilePage({ params }: { params: Promise<Pa
   const profile = await loadProfile(username);
   const name = userDisplayName(profile);
   const binderIsPublic = profile.binder_visibility === "public";
+  const binderPages = binderIsPublic ? await loadBinder(username) : [];
 
   const stats = [
     { label: "Binder",           value: binderIsPublic ? "Public" : "Private" },
@@ -140,7 +155,8 @@ export default async function PublicProfilePage({ params }: { params: Promise<Pa
         {/* binder — left 9 cols */}
         {/* Binder teammate: pass pages={binderPages} once the API endpoint exists */}
         <div className="col-span-12 xl:col-span-9">
-          <BinderPreview pages={[]} binderIsPublic={binderIsPublic} />
+          {/* <BinderPreview pages={[]} binderIsPublic={binderIsPublic} /> */}
+          <BinderPreview pages={binderPages} binderIsPublic={binderIsPublic} />
         </div>
 
         {/* right rail — 3 cols */}
