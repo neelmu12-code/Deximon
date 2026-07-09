@@ -13,6 +13,7 @@ class Settings(BaseSettings):
     )
     redis_url: str = Field(default="redis://localhost:6379/0", alias="REDIS_URL")
     scanner_url: str = Field(default="http://scanner:8001", alias="SCANNER_URL")
+    scanner_timeout_seconds: float = Field(default=90, gt=0, alias="SCANNER_TIMEOUT_SECONDS")
 
     jwt_secret_key: str = Field(
         validation_alias=AliasChoices("JWT_SECRET_KEY", "JWT_SECRET"),

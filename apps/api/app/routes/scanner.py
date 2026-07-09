@@ -28,7 +28,8 @@ async def _forward_to_scanner(
     url = f"{settings.scanner_url.rstrip('/')}{endpoint}"
 
     try:
-        async with httpx.AsyncClient(timeout=30) as client:
+        timeout = httpx.Timeout(settings.scanner_timeout_seconds)
+        async with httpx.AsyncClient(timeout=timeout) as client:
             response = await client.post(url, files=files, data=data)
     except httpx.HTTPError as exc:
         raise HTTPException(
