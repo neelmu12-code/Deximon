@@ -1,21 +1,21 @@
 "use client";
 
-import { useState, useCallback, useEffect } from "react";
-import { useRouter } from "next/navigation";
 import { useAuth } from "@/lib/auth";
 import { fetchAPI } from "@/lib/fetchAPI";
-import type { CardSlot, BinderCoverConfig } from "@/lib/binderTypes";
-import { DEFAULT_COVER } from "@/lib/binderTypes";
+import { useRouter } from "next/navigation";
+import { useCallback, useEffect, useState } from "react";
+// import type { CardSlot, BinderCoverConfig } from "@/lib/binderTypes";
+// import { DEFAULT_COVER } from "@/lib/binderTypes";
 import { BinderSpread } from "@/components/binder/BinderSpread";
-import { CoverEditorPanel } from "@/components/binder/CoverEditorPanel";
-import { ManualAddModal } from "@/components/binder/ManualAddModal";
-import { ConfirmCardModal } from "@/components/binder/ConfirmCardModal";
 import { CardDetailPanel } from "@/components/binder/CardDetailPanel";
+import { ConfirmCardModal } from "@/components/binder/ConfirmCardModal";
+import { CoverEditorPanel } from "@/components/binder/CoverEditorPanel";
 import { CoverThumb } from "@/components/binder/CoverThumb";
+import { ManualAddModal } from "@/components/binder/ManualAddModal";
+import type { BackendBinderResponse, BinderCoverConfig, CardSlot } from "@/lib/binderTypes";
+import { DEFAULT_COVER, mapBackendBinder } from "@/lib/binderTypes";
 import {
   defaultDetails,
-  pokemonImageUrl,
-  type BackendOwnedCard,
   type CardDetails,
   type SearchCard,
 } from "@/lib/cardDetails";
@@ -26,13 +26,13 @@ const STORAGE_KEYS = {
   cover: "deximon_binder_cover",
 } as const;
 
-const PLACEHOLDER_CARD_IMAGE =
-  "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 250 350'%3E%3Crect width='250' height='350' rx='18' fill='%23201916'/%3E%3Crect x='18' y='18' width='214' height='314' rx='14' fill='none' stroke='%23715a32' stroke-width='4' stroke-dasharray='12 10'/%3E%3Ctext x='125' y='178' text-anchor='middle' fill='%23b99a52' font-family='Arial' font-size='20'%3EDeximon%3C/text%3E%3C/svg%3E";
+// const PLACEHOLDER_CARD_IMAGE =
+//   "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 250 350'%3E%3Crect width='250' height='350' rx='18' fill='%23201916'/%3E%3Crect x='18' y='18' width='214' height='314' rx='14' fill='none' stroke='%23715a32' stroke-width='4' stroke-dasharray='12 10'/%3E%3Ctext x='125' y='178' text-anchor='middle' fill='%23b99a52' font-family='Arial' font-size='20'%3EDeximon%3C/text%3E%3C/svg%3E";
 
-type BackendBinderSlot = {
-  slot_index: number;
-  card: BackendOwnedCard | null;
-};
+// type BackendBinderSlot = {
+//   slot_index: number;
+//   card: BackendOwnedCard | null;
+// };
 
 type BackendListing = {
   id: string;
@@ -47,14 +47,14 @@ function listedStatusLabel(status: string): "Available" | "On Hold" | "Sold" {
   return "Available";
 }
 
-type BackendBinderPage = {
-  page_index: number;
-  slots: BackendBinderSlot[];
-};
+// type BackendBinderPage = {
+//   page_index: number;
+//   slots: BackendBinderSlot[];
+// };
 
-type BackendBinderResponse = {
-  pages: BackendBinderPage[];
-};
+// type BackendBinderResponse = {
+//   pages: BackendBinderPage[];
+// };
 
 function loadFromStorage<T>(key: string, fallback: T): T {
   if (typeof window === "undefined") return fallback;
@@ -66,33 +66,33 @@ function loadFromStorage<T>(key: string, fallback: T): T {
   }
 }
 
-function imageForCard(card: BackendOwnedCard): string {
-  return card.image_url ?? pokemonImageUrl(card.set_code, card.number) ?? PLACEHOLDER_CARD_IMAGE;
-}
+// function imageForCard(card: BackendOwnedCard): string {
+//   return card.image_url ?? pokemonImageUrl(card.set_code, card.number) ?? PLACEHOLDER_CARD_IMAGE;
+// }
 
-function mapBackendBinder(binder: BackendBinderResponse): CardSlot[][] {
-  const orderedPages = [...binder.pages].sort((a, b) => a.page_index - b.page_index);
-  if (orderedPages.length === 0) return [[...Array(9)].map(() => null) as CardSlot[]];
+// function mapBackendBinder(binder: BackendBinderResponse): CardSlot[][] {
+//   const orderedPages = [...binder.pages].sort((a, b) => a.page_index - b.page_index);
+//   if (orderedPages.length === 0) return [[...Array(9)].map(() => null) as CardSlot[]];
 
-  return orderedPages.map((page) => {
-    const slots = [...Array(9)].map(() => null) as CardSlot[];
-    for (const slot of page.slots) {
-      if (!slot.card || slot.slot_index < 0 || slot.slot_index > 8) continue;
-      slots[slot.slot_index] = {
-        id: slot.card.id,
-        name: slot.card.name,
-        set: slot.card.set_code ?? "",
-        num: slot.card.number ?? "",
-        rarity: slot.card.rarity ?? "",
-        condition: slot.card.condition,
-        language: slot.card.language,
-        holo_type: slot.card.holo_type,
-        image: imageForCard(slot.card),
-      };
-    }
-    return slots;
-  });
-}
+//   return orderedPages.map((page) => {
+//     const slots = [...Array(9)].map(() => null) as CardSlot[];
+//     for (const slot of page.slots) {
+//       if (!slot.card || slot.slot_index < 0 || slot.slot_index > 8) continue;
+//       slots[slot.slot_index] = {
+//         id: slot.card.id,
+//         name: slot.card.name,
+//         set: slot.card.set_code ?? "",
+//         num: slot.card.number ?? "",
+//         rarity: slot.card.rarity ?? "",
+//         condition: slot.card.condition,
+//         language: slot.card.language,
+//         holo_type: slot.card.holo_type,
+//         image: imageForCard(slot.card),
+//       };
+//     }
+//     return slots;
+//   });
+// }
 
 type SlotTarget = { pageIdx: number; slotIdx: number };
 
@@ -400,3 +400,4 @@ export default function BinderPage() {
     </div>
   );
 }
+
