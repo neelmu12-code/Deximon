@@ -196,6 +196,7 @@ def me(current_user: CurrentUser) -> MeResponse:
     return _me_response(current_user)
 
 
+@router.post("/forgot-password", response_model=MessageResponse)
 @api_router.post("/forgot-password", response_model=MessageResponse)
 def forgot_password(
     payload: ForgotPasswordRequest,
@@ -233,6 +234,7 @@ def forgot_password(
     return MessageResponse(message=FORGOT_PASSWORD_MESSAGE)
 
 
+@router.post("/reset-password", response_model=MessageResponse)
 @api_router.post("/reset-password", response_model=MessageResponse)
 def reset_password(
     payload: ResetPasswordRequest,

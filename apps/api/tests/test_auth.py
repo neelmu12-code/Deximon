@@ -168,6 +168,13 @@ def test_forgot_password_returns_generic_success_for_nonexistent_email(
         assert db.scalar(select(PasswordResetToken)) is None
 
 
+def test_direct_forgot_password_route_supports_single_domain_proxy(client: TestClient) -> None:
+    response = client.post("/auth/forgot-password", json={"email": "missing@example.com"})
+
+    assert response.status_code == 200
+    assert response.json() == {"message": FORGOT_PASSWORD_MESSAGE}
+
+
 def test_reset_password_succeeds_and_login_uses_new_password(
     client: TestClient, session_factory: sessionmaker[Session], monkeypatch
 ) -> None:
