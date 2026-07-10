@@ -13,7 +13,7 @@ from app.models.user import PasswordResetToken, User
 from app.routes import auth as auth_routes
 from app.routes.auth import _google_user
 
-FORGOT_PASSWORD_MESSAGE = "If an account with that email exists, password reset instructions have been sent."
+FORGOT_PASSWORD_MESSAGE = "If an account exists for that email, a reset link has been sent."
 RESET_PASSWORD_MESSAGE = "Password has been reset successfully."
 
 

@@ -29,6 +29,13 @@ class Settings(BaseSettings):
         gt=0,
         alias="RESET_TOKEN_EXPIRE_MINUTES",
     )
+    email_mode: str = Field(default="console", alias="EMAIL_MODE")
+    smtp_host: str = Field(default="", alias="SMTP_HOST")
+    smtp_port: int = Field(default=587, gt=0, alias="SMTP_PORT")
+    smtp_username: str = Field(default="", alias="SMTP_USERNAME")
+    smtp_password: str = Field(default="", alias="SMTP_PASSWORD")
+    smtp_from: str = Field(default="", alias="SMTP_FROM")
+    smtp_from_name: str = Field(default="Deximon", alias="SMTP_FROM_NAME")
 
     frontend_origin: str = Field(
         default="http://localhost:3000",
@@ -68,6 +75,14 @@ class Settings(BaseSettings):
         if value.lower() == "none":
             raise ValueError("JWT_ALGORITHM must sign tokens")
         return value
+
+    @field_validator("email_mode")
+    @classmethod
+    def validate_email_mode(cls, value: str) -> str:
+        normalized = value.strip().lower()
+        if normalized not in {"console", "smtp"}:
+            raise ValueError("EMAIL_MODE must be either 'console' or 'smtp'")
+        return normalized
 
     @property
     def cors_origin_list(self) -> list[str]:

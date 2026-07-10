@@ -1,3 +1,4 @@
+import logging
 import re
 from datetime import UTC, datetime, timedelta
 from functools import lru_cache
@@ -38,11 +39,12 @@ from app.services.email import send_password_reset_email
 
 router = APIRouter(prefix="/auth", tags=["auth"])
 api_router = APIRouter(prefix="/api/auth", tags=["auth"])
+logger = logging.getLogger(__name__)
 DbSession = Annotated[Session, Depends(get_db)]
 SettingsDep = Annotated[Settings, Depends(get_settings)]
 CurrentUser = Annotated[User, Depends(get_current_user)]
 
-FORGOT_PASSWORD_MESSAGE = "If an account with that email exists, password reset instructions have been sent."
+FORGOT_PASSWORD_MESSAGE = "If an account exists for that email, a reset link has been sent."
 RESET_PASSWORD_MESSAGE = "Password has been reset successfully."
 
 
@@ -224,7 +226,10 @@ def forgot_password(
         return MessageResponse(message=FORGOT_PASSWORD_MESSAGE)
 
     reset_url = f"{settings.frontend_url.rstrip('/')}/reset-password?token={raw_token}"
-    send_password_reset_email(user.email, reset_url)
+    try:
+        send_password_reset_email(user.email, reset_url)
+    except Exception:
+        logger.exception("Password reset email delivery failed")
     return MessageResponse(message=FORGOT_PASSWORD_MESSAGE)
 
 
