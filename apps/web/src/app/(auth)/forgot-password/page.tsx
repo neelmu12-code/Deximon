@@ -5,7 +5,7 @@ import { useState } from "react";
 import { Wordmark } from "@/components/Wordmark";
 import { fetchAPI } from "@/lib/fetchAPI";
 
-const SUCCESS_MESSAGE = "If an account with that email exists, password reset instructions have been sent.";
+const SUCCESS_MESSAGE = "If an account exists for that email, a reset link has been sent.";
 
 function messageFromError(error: unknown): string {
   if (error instanceof Error) return error.message;
@@ -77,7 +77,7 @@ export default function ForgotPasswordPage() {
             <div className="rounded-md border border-dx-green/40 bg-dx-green/10 px-3 py-2 text-[13px] text-dx-green">
               <p>{success}</p>
               <p className="mt-1 text-[12px] text-ink2">
-                Local dev: when email is not configured, the reset link is printed in the API logs.
+                If you signed up with Google, use Continue with Google on the sign-in page.
               </p>
             </div>
           )}
