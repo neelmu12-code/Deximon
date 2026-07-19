@@ -157,6 +157,26 @@ def test_forgot_password_returns_generic_success_for_existing_email(
         assert reset_token.revoked_at is None
 
 
+def test_forgot_password_still_succeeds_when_email_delivery_fails(
+    client: TestClient, session_factory: sessionmaker[Session], monkeypatch
+) -> None:
+    register(client)
+
+    def _boom(_email: str, _reset_url: str) -> None:
+        raise RuntimeError("smtp down")
+
+    monkeypatch.setattr(auth_routes, "send_password_reset_email", _boom)
+
+    response = client.post("/api/auth/forgot-password", json={"email": "misty@example.com"})
+
+    # Delivery runs off the request path, so a broken mailer can't change the
+    # response or leak that the account exists — the token is still persisted.
+    assert response.status_code == 200
+    assert response.json() == {"message": FORGOT_PASSWORD_MESSAGE}
+    with session_factory() as db:
+        assert db.scalar(select(PasswordResetToken)) is not None
+
+
 def test_forgot_password_returns_generic_success_for_nonexistent_email(
     client: TestClient, session_factory: sessionmaker[Session]
 ) -> None:

@@ -2,7 +2,7 @@ from typing import Annotated
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Path, status
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from app.db.session import get_db
@@ -340,15 +340,10 @@ def move_binder_card(
 
 @router.get("/{username}", response_model=BinderResponse)
 def get_public_binder(username: str, db: DbSession) -> BinderResponse:
-    # Imported here
-    from sqlalchemy import func as sa_func
-
-    from app.models.user import User
-
     # Find the user by username (case-insensitive)
     user = db.scalar(
         select(User).where(
-            sa_func.lower(User.username) == username.lower(), User.is_active.is_(True)
+            func.lower(User.username) == username.lower(), User.is_active.is_(True)
         )
     )
     if user is None:

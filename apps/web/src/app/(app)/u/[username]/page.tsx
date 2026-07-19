@@ -2,7 +2,6 @@ import Image from "next/image";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { Fragment } from "react";
-// import { BinderPreview } from "@/components/profile/BinderPreview";
 import { BinderPreview, type CardSlot } from "@/components/profile/BinderPreview";
 import { EditProfileButton } from "@/components/profile/EditProfileButton";
 import { ProfileReviews } from "@/components/profile/ProfileReviews";
@@ -12,11 +11,6 @@ import type { PublicProfile } from "@/lib/auth";
 import { mapBackendBinder, type BackendBinderResponse } from "@/lib/binderTypes";
 import { ApiError, fetchAPI } from "@/lib/fetchAPI";
 import { avatarHue, userDisplayName } from "@/lib/userDisplay";
-
-// Binder teammate: fetch binder pages here and pass them to <BinderPreview pages={...} />.
-// Shape: CardSlot[][] — each inner array is one 9-slot page. Import CardSlot from
-// @/components/profile/BinderPreview. Example call:
-//   const binderPages = await fetchAPI<CardSlot[][]>(`/binder/${username}/pages`);
 
 type Params = { username: string };
 
@@ -34,7 +28,7 @@ async function loadProfile(username: string): Promise<PublicProfile> {
 // Returns empty array if binder is private or anything goes wrong.
 async function loadBinder(username: string): Promise<CardSlot[][]> {
   try {
-        const data = await fetchAPI<BackendBinderResponse>(
+    const data = await fetchAPI<BackendBinderResponse>(
       `/binder/${encodeURIComponent(username)}`
     );
     if (!data) return [];
@@ -154,9 +148,7 @@ export default async function PublicProfilePage({ params }: { params: Promise<Pa
       {/* main grid */}
       <div className="grid grid-cols-12 gap-6">
         {/* binder — left 9 cols */}
-        {/* Binder teammate: pass pages={binderPages} once the API endpoint exists */}
         <div className="col-span-12 xl:col-span-9">
-          {/* <BinderPreview pages={[]} binderIsPublic={binderIsPublic} /> */}
           <BinderPreview pages={binderPages} binderIsPublic={binderIsPublic} />
         </div>
 
