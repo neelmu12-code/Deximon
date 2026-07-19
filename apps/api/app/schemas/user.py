@@ -20,6 +20,12 @@ class ProfileResponse(BaseModel):
     review_count: int = 0
 
 
+class ProfileStatsResponse(BaseModel):
+    cards_owned: int
+    cards_listed: int
+    completed_trades: int
+
+
 class MeResponse(ProfileResponse):
     id: UUID
     email: str
