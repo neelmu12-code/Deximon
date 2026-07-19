@@ -338,3 +338,47 @@ def test_card_update_and_delete_scoped_to_owner(client: TestClient) -> None:
     assert (
         client.delete(f"/binder/cards/{card['id']}", headers=intruder_headers).status_code == 404
     )
+
+
+def _binder_card_names(body: dict[str, object]) -> list[str]:
+    return [
+        slot["card"]["name"]
+        for page in body["pages"]  # type: ignore[attr-defined]
+        for slot in page["slots"]
+        if slot["card"] is not None
+    ]
+
+
+def test_public_binder_returns_owner_cards_when_public(client: TestClient) -> None:
+    owner = register_user(client, "misty@example.com", "misty")
+    create_card(client, auth_headers(owner), name="Starmie", set_code="base1")
+
+    # No auth header: a public binder is readable by anyone.
+    response = client.get("/binder/misty")
+
+    assert response.status_code == 200
+    assert "Starmie" in _binder_card_names(response.json())
+
+
+def test_public_binder_lookup_is_case_insensitive(client: TestClient) -> None:
+    register_user(client, "ash@example.com", "Ash")
+
+    assert client.get("/binder/ASH").status_code == 200
+    assert client.get("/binder/ash").status_code == 200
+
+
+def test_public_binder_hidden_when_owner_is_private(client: TestClient) -> None:
+    owner = register_user(client, "brock@example.com", "brock")
+    headers = auth_headers(owner)
+    create_card(client, headers, name="Onix", set_code="base1")
+
+    privacy = client.patch(
+        "/profiles/me/privacy", headers=headers, json={"binder_visibility": "private"}
+    )
+    assert privacy.status_code == 200
+
+    assert client.get("/binder/brock").status_code == 403
+
+
+def test_public_binder_unknown_user_returns_404(client: TestClient) -> None:
+    assert client.get("/binder/nobody").status_code == 404

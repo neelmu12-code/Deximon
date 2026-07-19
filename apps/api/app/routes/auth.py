@@ -7,7 +7,7 @@ from uuid import uuid4
 
 from authlib.integrations.base_client.errors import OAuthError
 from authlib.integrations.starlette_client import OAuth
-from fastapi import APIRouter, Depends, HTTPException, Response, status
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Response, status
 from fastapi.responses import RedirectResponse
 from sqlalchemy import func, select, update
 from sqlalchemy.exc import IntegrityError
@@ -196,11 +196,20 @@ def me(current_user: CurrentUser) -> MeResponse:
     return _me_response(current_user)
 
 
+def _deliver_password_reset_email(email: str, reset_url: str) -> None:
+    """Send the reset email, swallowing failures so a background task can't crash."""
+    try:
+        send_password_reset_email(email, reset_url)
+    except Exception:
+        logger.exception("Password reset email delivery failed")
+
+
 @router.post("/forgot-password", response_model=MessageResponse)
 @api_router.post("/forgot-password", response_model=MessageResponse)
 def forgot_password(
     payload: ForgotPasswordRequest,
     request: Request,
+    background_tasks: BackgroundTasks,
     db: DbSession,
     settings: SettingsDep,
 ) -> MessageResponse:
@@ -227,10 +236,9 @@ def forgot_password(
         return MessageResponse(message=FORGOT_PASSWORD_MESSAGE)
 
     reset_url = f"{settings.frontend_url.rstrip('/')}/reset-password?token={raw_token}"
-    try:
-        send_password_reset_email(user.email, reset_url)
-    except Exception:
-        logger.exception("Password reset email delivery failed")
+    # Send off the request path so the response time doesn't reveal whether the
+    # account exists (SMTP delivery only happens for real accounts and can be slow).
+    background_tasks.add_task(_deliver_password_reset_email, user.email, reset_url)
     return MessageResponse(message=FORGOT_PASSWORD_MESSAGE)
 
 
