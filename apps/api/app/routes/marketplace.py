@@ -2,7 +2,7 @@ from typing import Annotated
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
-from sqlalchemy import or_, select
+from sqlalchemy import func, or_, select
 from sqlalchemy.orm import Session, selectinload
 
 from app.db.session import get_db
@@ -122,6 +122,7 @@ def list_listings(
     rarity: Annotated[str | None, Query(max_length=40)] = None,
     card_type: Annotated[str | None, Query(alias="type", max_length=40)] = None,
     condition: Annotated[str | None, Query(max_length=20)] = None,
+    seller: Annotated[str | None, Query(max_length=30)] = None,
     limit: Annotated[int, Query(ge=1, le=50)] = 24,
     offset: Annotated[int, Query(ge=0)] = 0,
 ) -> list[ListingResponse]:
@@ -131,6 +132,11 @@ def list_listings(
         stmt = stmt.where(Listing.status != ListingStatus.CANCELLED)
     else:
         stmt = stmt.where(Listing.status == status_filter)
+
+    if seller:
+        stmt = stmt.join(User, Listing.seller_id == User.id).where(
+            func.lower(User.username) == seller.lower()
+        )
 
     if q:
         pattern = f"%{q}%"

@@ -10,9 +10,21 @@ import { Stars } from "@/components/ui/Stars";
 import type { PublicProfile } from "@/lib/auth";
 import { mapBackendBinder, type BackendBinderResponse } from "@/lib/binderTypes";
 import { ApiError, fetchAPI } from "@/lib/fetchAPI";
+import {
+  formatPrice,
+  type Listing,
+  listingImageUrl,
+  listingStatusLabel,
+} from "@/lib/marketplace";
 import { avatarHue, userDisplayName } from "@/lib/userDisplay";
 
 type Params = { username: string };
+
+type ProfileStats = {
+  cards_owned: number;
+  cards_listed: number;
+  completed_trades: number;
+};
 
 async function loadProfile(username: string): Promise<PublicProfile> {
   try {
@@ -38,6 +50,28 @@ async function loadBinder(username: string): Promise<CardSlot[][]> {
   }
 }
 
+// Owned/listed/completed-trade counts for the quick-stats card. Null on failure
+// so the card can fall back to em dashes rather than blowing up the page.
+async function loadStats(username: string): Promise<ProfileStats | null> {
+  try {
+    return await fetchAPI<ProfileStats>(`/profiles/${encodeURIComponent(username)}/stats`);
+  } catch {
+    return null;
+  }
+}
+
+// A few of this seller's most recent listings for the profile rail.
+async function loadListings(username: string): Promise<Listing[]> {
+  try {
+    const data = await fetchAPI<Listing[]>(
+      `/market/listings?seller=${encodeURIComponent(username)}&limit=5`
+    );
+    return data ?? [];
+  } catch {
+    return [];
+  }
+}
+
 export async function generateMetadata({ params }: { params: Promise<Params> }) {
   const { username } = await params;
   return { title: `@${username} - Deximon` };
@@ -48,13 +82,19 @@ export default async function PublicProfilePage({ params }: { params: Promise<Pa
   const profile = await loadProfile(username);
   const name = userDisplayName(profile);
   const binderIsPublic = profile.binder_visibility === "public";
-  const binderPages = binderIsPublic ? await loadBinder(username) : [];
+  const [binderPages, profileStats, listings] = await Promise.all([
+    binderIsPublic ? loadBinder(username) : Promise.resolve<CardSlot[][]>([]),
+    loadStats(username),
+    loadListings(username),
+  ]);
 
+  const numberOrDash = (value: number | undefined) =>
+    value == null ? "—" : value.toLocaleString();
   const stats = [
     { label: "Binder",           value: binderIsPublic ? "Public" : "Private" },
-    { label: "Cards owned",      value: "—" },
-    { label: "Cards listed",     value: "—" },
-    { label: "Completed trades", value: "—" },
+    { label: "Cards owned",      value: numberOrDash(profileStats?.cards_owned) },
+    { label: "Cards listed",     value: numberOrDash(profileStats?.cards_listed) },
+    { label: "Completed trades", value: numberOrDash(profileStats?.completed_trades) },
   ];
 
   return (
@@ -175,13 +215,45 @@ export default async function PublicProfilePage({ params }: { params: Promise<Pa
                 View all
               </Link>
             </div>
-            <p className="text-sm text-ink3 text-center py-4">No active listings.</p>
-          </div>
-
-          {/* Set progress */}
-          <div className="bg-surface border border-hair rounded-xl p-5">
-            <div className="text-[11px] uppercase tracking-[0.22em] text-ink3 mb-3">Set progress</div>
-            <p className="text-sm text-ink3 text-center py-4">No sets tracked yet.</p>
+            {listings.length === 0 ? (
+              <p className="text-sm text-ink3 text-center py-4">No active listings.</p>
+            ) : (
+              <ul className="space-y-1">
+                {listings.map((listing) => {
+                  const image = listingImageUrl(listing.card);
+                  return (
+                    <li key={listing.id}>
+                      <Link
+                        href={`/market/${listing.id}`}
+                        className="flex items-center gap-3 rounded-lg p-1.5 hover:bg-surface2 transition-colors"
+                      >
+                        <div className="relative w-8 h-11 rounded bg-surface2 overflow-hidden shrink-0">
+                          {image && (
+                            <Image
+                              src={image}
+                              alt={listing.card.name}
+                              fill
+                              className="object-cover"
+                              sizes="32px"
+                              unoptimized
+                            />
+                          )}
+                        </div>
+                        <div className="min-w-0 flex-1">
+                          <div className="text-sm text-ink truncate">{listing.card.name}</div>
+                          <div className="text-[11px] text-ink3">
+                            {listingStatusLabel(listing.status)}
+                          </div>
+                        </div>
+                        <div className="text-sm font-semibold tabular-nums text-ink shrink-0">
+                          {formatPrice(listing.asking_price)}
+                        </div>
+                      </Link>
+                    </li>
+                  );
+                })}
+              </ul>
+            )}
           </div>
 
           <ProfileReviews username={username} />

@@ -382,3 +382,46 @@ def test_public_binder_hidden_when_owner_is_private(client: TestClient) -> None:
 
 def test_public_binder_unknown_user_returns_404(client: TestClient) -> None:
     assert client.get("/binder/nobody").status_code == 404
+
+
+def test_profile_stats_counts_owned_listed_and_sold(client: TestClient) -> None:
+    seller = register_user(client, "sasha@example.com", "sasha")
+    headers = auth_headers(seller)
+
+    charizard = create_card(client, headers, name="Charizard", set_code="base1")
+    blastoise = create_card(client, headers, name="Blastoise", set_code="base1")
+    create_card(client, headers, name="Venusaur", set_code="base1")  # owned, never listed
+
+    create_listing(client, headers, str(charizard["id"]))  # stays available
+    sold = create_listing(client, headers, str(blastoise["id"]))
+    marked = client.patch(
+        f"/market/listings/{sold['id']}", headers=headers, json={"status": "sold"}
+    )
+    assert marked.status_code == 200
+
+    stats = client.get("/profiles/sasha/stats")
+    assert stats.status_code == 200
+    assert stats.json() == {"cards_owned": 3, "cards_listed": 1, "completed_trades": 1}
+
+
+def test_profile_stats_unknown_user_returns_404(client: TestClient) -> None:
+    assert client.get("/profiles/ghost/stats").status_code == 404
+
+
+def test_marketplace_listings_filter_by_seller(client: TestClient) -> None:
+    ash = register_user(client, "ash2@example.com", "ashketchum")
+    gary = register_user(client, "gary@example.com", "garyoak")
+    ash_card = create_card(client, auth_headers(ash), name="Pikachu", set_code="base1")
+    gary_card = create_card(client, auth_headers(gary), name="Eevee", set_code="base1")
+    create_listing(client, auth_headers(ash), str(ash_card["id"]))
+    create_listing(client, auth_headers(gary), str(gary_card["id"]))
+
+    result = client.get("/market/listings?seller=ashketchum")
+    assert result.status_code == 200
+    body = result.json()
+    assert len(body) == 1
+    assert body[0]["seller"]["username"] == "ashketchum"
+    assert body[0]["card"]["name"] == "Pikachu"
+
+    # Lookup is case-insensitive.
+    assert len(client.get("/market/listings?seller=AshKetchum").json()) == 1

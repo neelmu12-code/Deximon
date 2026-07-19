@@ -10,8 +10,15 @@ from sqlalchemy.orm import Session, selectinload
 from app.core.config import Settings, get_settings
 from app.db.session import get_db
 from app.dependencies.auth import get_current_user
+from app.models.card import Card
+from app.models.listing import Listing, ListingStatus
 from app.models.user import User
-from app.schemas.user import PrivacyUpdateRequest, ProfileResponse, ProfileUpdateRequest
+from app.schemas.user import (
+    PrivacyUpdateRequest,
+    ProfileResponse,
+    ProfileStatsResponse,
+    ProfileUpdateRequest,
+)
 from app.services.reviews import seller_rating
 
 router = APIRouter(prefix="/profiles", tags=["profiles"])
@@ -62,6 +69,47 @@ def public_profile(username: str, db: DbSession) -> ProfileResponse:
     if user is None or user.profile is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Profile not found")
     return _profile_response(user, db)
+
+
+@router.get("/{username}/stats", response_model=ProfileStatsResponse)
+def profile_stats(username: str, db: DbSession) -> ProfileStatsResponse:
+    user_id = db.scalar(
+        select(User.id).where(
+            func.lower(User.username) == username.lower(), User.is_active.is_(True)
+        )
+    )
+    if user_id is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Profile not found")
+
+    cards_owned = (
+        db.scalar(select(func.count()).select_from(Card).where(Card.owner_id == user_id)) or 0
+    )
+    # "Listed" is what's currently on the market — available or on hold, not sold/cancelled.
+    cards_listed = (
+        db.scalar(
+            select(func.count())
+            .select_from(Listing)
+            .where(
+                Listing.seller_id == user_id,
+                Listing.status.in_([ListingStatus.AVAILABLE, ListingStatus.ON_HOLD]),
+            )
+        )
+        or 0
+    )
+    # No separate trade record exists, so a completed trade is a sold listing.
+    completed_trades = (
+        db.scalar(
+            select(func.count())
+            .select_from(Listing)
+            .where(Listing.seller_id == user_id, Listing.status == ListingStatus.SOLD)
+        )
+        or 0
+    )
+    return ProfileStatsResponse(
+        cards_owned=cards_owned,
+        cards_listed=cards_listed,
+        completed_trades=completed_trades,
+    )
 
 
 @router.patch("/me", response_model=ProfileResponse)
