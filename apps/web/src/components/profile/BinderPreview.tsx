@@ -2,6 +2,7 @@
 
 import Image from "next/image";
 import { useState } from "react";
+import { EmptyState } from "@/components/ui/EmptyState";
 import type { HoloType } from "@/lib/cardDetails";
 
 // Binder teammate: replace `pages` prop with data fetched from the binder API.
@@ -92,26 +93,17 @@ export function BinderPreview({ pages = [], binderIsPublic = true }: Props) {
           <div className="flex-1 h-px bg-hair" />
           {visibilityChip}
         </div>
-        <div
-          className="rounded-xl border border-[#2E2018] flex items-center justify-center py-20"
-          style={{ background: "linear-gradient(180deg, #181210 0%, #120D09 100%)" }}
-        >
-          <div className="text-center space-y-2">
-            <svg
-              viewBox="0 0 24 24"
-              className="w-8 h-8 text-white/20 mx-auto"
-              fill="none"
-              stroke="currentColor"
-              strokeWidth="1.4"
-              strokeLinecap="round"
-              strokeLinejoin="round"
-            >
+        <EmptyState
+          title="No cards yet"
+          description="Scan a card or add one manually to start building this binder."
+          className="border-[#2E2018] bg-[#120D09]"
+          icon={
+            <svg viewBox="0 0 24 24" className="h-5 w-5" fill="none" stroke="currentColor" strokeWidth="1.4">
               <rect x="3" y="3" width="18" height="18" rx="2" />
               <path d="M3 9h18M9 21V9" />
             </svg>
-            <p className="text-white/30 text-sm">No cards in this binder yet.</p>
-          </div>
-        </div>
+          }
+        />
       </div>
     );
   }

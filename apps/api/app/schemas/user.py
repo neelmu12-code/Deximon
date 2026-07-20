@@ -21,7 +21,7 @@ class ProfileResponse(BaseModel):
 
 
 class ProfileStatsResponse(BaseModel):
-    cards_owned: int
+    cards_owned: int | None
     cards_listed: int
     completed_trades: int
 

@@ -9,6 +9,7 @@ from sqlalchemy.orm import Session, sessionmaker
 from app.core.config import Settings, get_settings
 from app.core.security import hash_reset_token
 from app.main import app
+from app.models.card import Card
 from app.models.user import PasswordResetToken, User
 from app.routes import auth as auth_routes
 from app.routes.auth import _google_user
@@ -138,6 +139,31 @@ def test_privacy_update_requires_authentication(client: TestClient) -> None:
     response = client.patch("/profiles/me/privacy", json={"binder_visibility": "private"})
     assert response.status_code == 200
     assert response.json()["binder_visibility"] == "private"
+
+
+def test_private_profile_does_not_expose_owned_card_count(
+    client: TestClient, session_factory: sessionmaker[Session]
+) -> None:
+    register(client)
+    with session_factory() as db:
+        user = db.scalar(select(User).where(User.email == "misty@example.com"))
+        assert user is not None
+        db.add(Card(owner_id=user.id, name="Starmie"))
+        db.commit()
+
+    public_stats = client.get("/profiles/misty/stats")
+    assert public_stats.status_code == 200
+    assert public_stats.json()["cards_owned"] == 1
+
+    privacy_response = client.patch(
+        "/profiles/me/privacy", json={"binder_visibility": "private"}
+    )
+    assert privacy_response.status_code == 200
+    assert privacy_response.json()["binder_visibility"] == "private"
+
+    private_stats = client.get("/profiles/misty/stats")
+    assert private_stats.status_code == 200
+    assert private_stats.json()["cards_owned"] is None
 
 
 def test_forgot_password_returns_generic_success_for_existing_email(

@@ -5,6 +5,7 @@ import { Fragment } from "react";
 import { BinderPreview, type CardSlot } from "@/components/profile/BinderPreview";
 import { EditProfileButton } from "@/components/profile/EditProfileButton";
 import { ProfileReviews } from "@/components/profile/ProfileReviews";
+import { ShareProfileButton } from "@/components/profile/ShareProfileButton";
 import { Avatar } from "@/components/ui/Avatar";
 import { Stars } from "@/components/ui/Stars";
 import type { PublicProfile } from "@/lib/auth";
@@ -21,7 +22,7 @@ import { avatarHue, userDisplayName } from "@/lib/userDisplay";
 type Params = { username: string };
 
 type ProfileStats = {
-  cards_owned: number;
+  cards_owned: number | null;
   cards_listed: number;
   completed_trades: number;
 };
@@ -88,7 +89,7 @@ export default async function PublicProfilePage({ params }: { params: Promise<Pa
     loadListings(username),
   ]);
 
-  const numberOrDash = (value: number | undefined) =>
+  const numberOrDash = (value: number | null | undefined) =>
     value == null ? "—" : value.toLocaleString();
   const stats = [
     { label: "Binder",           value: binderIsPublic ? "Public" : "Private" },
@@ -177,9 +178,7 @@ export default async function PublicProfilePage({ params }: { params: Promise<Pa
         </div>
 
         <div className="flex gap-2 mt-1">
-          <button className="inline-flex items-center justify-center h-10 px-4 text-sm font-medium rounded-md bg-transparent text-ink border border-hair hover:bg-surface2 transition-colors">
-            Share profile
-          </button>
+          <ShareProfileButton username={profile.username} />
           {/* Only renders when the logged-in user matches this profile */}
           <EditProfileButton username={username} />
         </div>

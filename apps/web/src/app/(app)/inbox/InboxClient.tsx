@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { useEffect, useState } from "react";
+import { EmptyState } from "@/components/ui/EmptyState";
 import { ApiError, fetchAPI } from "@/lib/fetchAPI";
 import { listingStatusLabel, type Conversation } from "@/lib/marketplace";
 
@@ -57,9 +58,15 @@ export function InboxClient() {
       )}
 
       {!loading && !error && conversations.length === 0 && (
-        <div className="rounded border border-dashed border-neutral-300 p-12 text-center text-neutral-500 dark:border-neutral-700">
-          No conversations yet.
-        </div>
+        <EmptyState
+          title="No conversations yet"
+          description="Open a marketplace listing to start a conversation with its seller."
+          icon={
+            <svg viewBox="0 0 24 24" className="h-5 w-5" fill="none" stroke="currentColor" strokeWidth="1.5">
+              <path d="M5 5h14v10H9l-4 4V5Z" />
+            </svg>
+          }
+        />
       )}
 
       {!loading &&

@@ -17,6 +17,7 @@ import {
   type Tone,
 } from "@/components/marketplace/chips";
 import { ListCardPicker } from "@/components/marketplace/ListCardPicker";
+import { EmptyState } from "@/components/ui/EmptyState";
 import { Stars } from "@/components/ui/Stars";
 import { UserAvatar } from "@/components/ui/UserAvatar";
 import type { CardSlot } from "@/lib/binderTypes";
@@ -637,9 +638,16 @@ export function MarketplaceClient() {
           )}
 
           {!loading && !error && results.length === 0 && (
-            <div className="rounded-xl border border-hair bg-surface p-12 text-center text-ink2">
-              No listings match these filters. Try removing a filter or widening the price range.
-            </div>
+            <EmptyState
+              title="No listings match these filters"
+              description="Try removing a filter or widening the price range."
+              icon={
+                <svg viewBox="0 0 24 24" className="h-5 w-5" fill="none" stroke="currentColor" strokeWidth="1.5">
+                  <circle cx="11" cy="11" r="6" />
+                  <path d="m16 16 4 4" />
+                </svg>
+              }
+            />
           )}
 
           {!loading && !error && results.length > 0 && (
