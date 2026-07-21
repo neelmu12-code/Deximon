@@ -93,6 +93,7 @@ def _listing_response(
             condition=card.condition,
             language=card.language,
             holo_type=_holo_type(card),
+            full_art=card.is_full_art,
             image_url=card.image_url,
         ),
         seller=ListingSellerResponse(

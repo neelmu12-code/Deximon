@@ -3,6 +3,7 @@
 import Image from "next/image";
 import { useState } from "react";
 import { EmptyState } from "@/components/ui/EmptyState";
+import { HoloCard } from "@/components/binder/HoloCard";
 import type { HoloType } from "@/lib/cardDetails";
 
 // Binder teammate: replace `pages` prop with data fetched from the binder API.
@@ -19,6 +20,7 @@ export type CardSlot = {
   condition?: string | null;
   language?: string | null;
   holo_type?: HoloType | null;
+  full_art?: boolean;
   listed?: { listingId?: string; price: number; status: "Available" | "On Hold" | "Sold" };
 } | null;
 
@@ -128,7 +130,10 @@ export function BinderPreview({ pages = [], binderIsPublic = true }: Props) {
             {currentPage.map((slot, i) =>
               slot ? (
                 <div key={slot.id} className="relative group">
-                  <div
+                  <HoloCard
+                    holoType={slot.holo_type}
+                    rarity={slot.rarity}
+                    fullArt={slot.full_art}
                     className="relative aspect-[5/7] rounded-lg overflow-hidden transition-transform duration-200 group-hover:-translate-y-1.5"
                     style={{ boxShadow: "0 6px 16px rgba(0,0,0,0.55), 0 2px 4px rgba(0,0,0,0.4)" }}
                   >
@@ -140,7 +145,7 @@ export function BinderPreview({ pages = [], binderIsPublic = true }: Props) {
                       sizes="(max-width: 1280px) 25vw, 300px"
                     />
                     <div className="absolute inset-0 bg-gradient-to-br from-white/5 via-transparent to-black/15 pointer-events-none" />
-                  </div>
+                  </HoloCard>
 
                   <div className="absolute left-1/2 -translate-x-1/2 bottom-full mb-2 opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none z-30 whitespace-nowrap">
                     <div className="bg-base/95 border border-hair rounded-md px-2.5 py-1.5 text-[11px] shadow-xl">

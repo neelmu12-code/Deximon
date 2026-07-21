@@ -17,6 +17,7 @@ export type CardIdentity = {
 export type CardDetails = {
   rarity: string;
   holo_type: HoloType;
+  full_art: boolean;
   condition: string;
   language: string;
 };
@@ -44,6 +45,7 @@ export type BackendOwnedCard = {
   condition: string | null;
   language: string | null;
   holo_type: HoloType;
+  full_art: boolean;
   image_url: string | null;
 };
 
@@ -132,6 +134,7 @@ export function defaultDetails(source: { rarity?: string | null }): CardDetails 
   return {
     rarity,
     holo_type: inferHoloType(rarity),
+    full_art: false,
     condition: "NM",
     language: "EN",
   };

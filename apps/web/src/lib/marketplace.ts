@@ -17,6 +17,7 @@ export type ListingCard = {
   condition: string | null;
   language: string | null;
   holo_type: "normal" | "holo" | "reverse_holo";
+  full_art: boolean;
   image_url: string | null;
 };
 
