@@ -74,6 +74,7 @@ export function mapBackendBinder(binder: BackendBinderResponse): CardSlot[][] {
         condition: slot.card.condition,
         language: slot.card.language,
         holo_type: slot.card.holo_type,
+        full_art: slot.card.full_art,
         image: imageForCard(slot.card),
       };
     }

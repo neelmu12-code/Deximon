@@ -27,6 +27,9 @@ class Card(Base):
     language: Mapped[str | None] = mapped_column(String(10), nullable=True)
     is_holo: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
     is_reverse_holo: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    # Full-art cards (many holo promos, SIRs) have artwork spanning the whole card,
+    # which drives a distinct foil treatment in the UI. Independent of is_holo.
+    is_full_art: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
     image_url: Mapped[str | None] = mapped_column(String(500), nullable=True)
     notes: Mapped[str | None] = mapped_column(String(500), nullable=True)
 

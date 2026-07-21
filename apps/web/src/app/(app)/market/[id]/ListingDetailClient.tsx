@@ -11,6 +11,7 @@ import {
   rarityTone,
   typeTone,
 } from "@/components/marketplace/chips";
+import { HoloCard } from "@/components/binder/HoloCard";
 import { Stars } from "@/components/ui/Stars";
 import { UserAvatar } from "@/components/ui/UserAvatar";
 import { useAuth } from "@/lib/auth";
@@ -52,10 +53,12 @@ function timeAgo(iso: string): string {
 function CardArt({ card }: { card: ListingCard }) {
   const src = listingImageUrl(card);
   const [errored, setErrored] = useState(false);
-  const isHolo = card.holo_type !== "normal";
 
   return (
-    <div
+    <HoloCard
+      holoType={card.holo_type}
+      rarity={card.rarity}
+      fullArt={card.full_art}
       className="card-ratio relative overflow-hidden rounded-xl border border-hair bg-surface2"
       style={{ boxShadow: "0 10px 40px rgba(0,0,0,0.55), 0 2px 6px rgba(0,0,0,0.4)" }}
     >
@@ -74,8 +77,7 @@ function CardArt({ card }: { card: ListingCard }) {
           {card.name}
         </div>
       )}
-      {isHolo && <div className="sleeve-sheen pointer-events-none absolute inset-0" />}
-    </div>
+    </HoloCard>
   );
 }
 

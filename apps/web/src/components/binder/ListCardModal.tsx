@@ -65,6 +65,7 @@ export function ListCardModal({ card, onClose, onListed }: Props) {
               condition: card.condition || null,
               language: card.language || null,
               holo_type: card.holo_type || "normal",
+              full_art: card.full_art ?? false,
               image_url: card.image?.startsWith("http") ? card.image : null,
               place_in_binder: false,
             },
