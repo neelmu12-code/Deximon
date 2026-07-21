@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import Image from "next/image";
 import type { SearchCard } from "@/lib/cardDetails";
 import { fetchAPI } from "@/lib/fetchAPI";
@@ -10,36 +10,101 @@ type Props = {
   onClose: () => void;
 };
 
+// Results per page.
+const PAGE_SIZE = 24;
+
 export function ManualAddModal({ onPick, onClose }: Props) {
   const [query, setQuery] = useState("");
   const [results, setResults] = useState<SearchCard[]>([]);
   const [loading, setLoading] = useState(false);
+  const [loadingMore, setLoadingMore] = useState(false);
+  const [hasMore, setHasMore] = useState(false);
   const [debounced, setDebounced] = useState("");
+  // Cancels an in-flight page fetch when a new search starts.
+  const moreControllerRef = useRef<AbortController | null>(null);
+  // Stops the observer starting a second fetch mid-flight.
+  const loadingMoreRef = useRef(false);
+  // Points at the current loadMore so the observer never uses a stale one.
+  const loadMoreRef = useRef<() => void>(() => {});
+  const scrollRef = useRef<HTMLDivElement | null>(null);
+  const sentinelRef = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
     const t = setTimeout(() => setDebounced(query), 300);
     return () => clearTimeout(t);
   }, [query]);
 
+  // Fetch the first page when the query changes.
   useEffect(() => {
+    moreControllerRef.current?.abort();
     if (!debounced.trim()) {
       setResults([]);
+      setHasMore(false);
       setLoading(false);
       return;
     }
     const controller = new AbortController();
     setLoading(true);
     fetchAPI<SearchCard[]>(
-      `/cards/search?q=${encodeURIComponent(debounced)}&limit=24`,
+      `/cards/search?q=${encodeURIComponent(debounced)}&limit=${PAGE_SIZE}&offset=0`,
       { signal: controller.signal },
     )
-      .then((data) => setResults(data ?? []))
+      .then((data) => {
+        const rows = data ?? [];
+        setResults(rows);
+        setHasMore(rows.length === PAGE_SIZE);
+      })
       .catch((err: unknown) => {
-        if (!(err instanceof Error && err.name === "AbortError")) setResults([]);
+        if (!(err instanceof Error && err.name === "AbortError")) {
+          setResults([]);
+          setHasMore(false);
+        }
       })
       .finally(() => setLoading(false));
     return () => controller.abort();
   }, [debounced]);
+
+  async function loadMore() {
+    if (loadingMoreRef.current || !hasMore) return;
+    loadingMoreRef.current = true;
+    const controller = new AbortController();
+    moreControllerRef.current = controller;
+    setLoadingMore(true);
+    try {
+      const data = await fetchAPI<SearchCard[]>(
+        `/cards/search?q=${encodeURIComponent(debounced)}&limit=${PAGE_SIZE}&offset=${results.length}`,
+        { signal: controller.signal },
+      );
+      const rows = data ?? [];
+      setResults((prev) => [...prev, ...rows]);
+      setHasMore(rows.length === PAGE_SIZE);
+    } catch (err: unknown) {
+      // Keep existing results on error.
+      if (err instanceof Error && err.name === "AbortError") return;
+    } finally {
+      loadingMoreRef.current = false;
+      setLoadingMore(false);
+    }
+  }
+
+  // Keep loadMoreRef current.
+  useEffect(() => {
+    loadMoreRef.current = loadMore;
+  });
+
+  // Load the next page when the bottom sentinel scrolls into view.
+  useEffect(() => {
+    const sentinel = sentinelRef.current;
+    if (!sentinel) return;
+    const observer = new IntersectionObserver(
+      (entries) => {
+        if (entries[0].isIntersecting) loadMoreRef.current();
+      },
+      { root: scrollRef.current, rootMargin: "300px" },
+    );
+    observer.observe(sentinel);
+    return () => observer.disconnect();
+  }, [hasMore, loading]);
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
@@ -78,7 +143,7 @@ export function ManualAddModal({ onPick, onClose }: Props) {
           </button>
         </div>
         {/* Body */}
-        <div className="flex-1 overflow-y-auto p-4">
+        <div ref={scrollRef} className="flex-1 overflow-y-auto p-4">
           {loading ? (
             <div className="flex items-center justify-center py-16">
               <div className="w-6 h-6 rounded-full border-2 border-hair border-t-dx-red animate-spin" />
@@ -99,22 +164,31 @@ export function ManualAddModal({ onPick, onClose }: Props) {
               </p>
             </div>
           ) : (
-            <div className="grid grid-cols-4 sm:grid-cols-5 md:grid-cols-6 gap-3">
-              {results.map((card) => (
-                <button
-                  key={card.id}
-                  type="button"
-                  onClick={() => onPick(card)}
-                  className="group text-left"
-                >
-                  <div className="card-ratio relative rounded-md overflow-hidden mb-1 group-hover:ring-2 ring-dx-red transition-all">
-                    <Image src={card.image} alt={card.name} fill className="object-cover" sizes="100px" unoptimized />
-                  </div>
-                  <div className="text-[11px] text-ink truncate">{card.name}</div>
-                  <div className="text-[10px] text-ink3 font-mono">{card.set}</div>
-                </button>
-              ))}
-            </div>
+            <>
+              <div className="grid grid-cols-4 sm:grid-cols-5 md:grid-cols-6 gap-3">
+                {results.map((card) => (
+                  <button
+                    key={card.id}
+                    type="button"
+                    onClick={() => onPick(card)}
+                    className="group text-left"
+                  >
+                    <div className="card-ratio relative rounded-md overflow-hidden mb-1 group-hover:ring-2 ring-dx-red transition-all">
+                      <Image src={card.image} alt={card.name} fill className="object-cover" sizes="100px" unoptimized />
+                    </div>
+                    <div className="text-[11px] text-ink truncate">{card.name}</div>
+                    <div className="text-[10px] text-ink3 font-mono">{card.set}</div>
+                  </button>
+                ))}
+              </div>
+              {hasMore && (
+                <div ref={sentinelRef} className="flex justify-center py-5">
+                  {loadingMore && (
+                    <span className="w-5 h-5 rounded-full border-2 border-hair border-t-dx-red animate-spin" />
+                  )}
+                </div>
+              )}
+            </>
           )}
         </div>
       </div>
