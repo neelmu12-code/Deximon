@@ -20,6 +20,7 @@ def search_cards(
     q: Annotated[str, Query(min_length=1, max_length=100)],
     db: DbSession,
     limit: Annotated[int, Query(ge=1, le=50)] = 24,
+    offset: Annotated[int, Query(ge=0)] = 0,
 ) -> list[CardSearchResult]:
     rows = db.scalars(
         sa.select(TcgCard)
@@ -31,17 +32,22 @@ def search_cards(
             )
         )
         .order_by(
-            # Exact-prefix matches first, then everything else alphabetically
+            # Prefix matches first, then alphabetical. id keeps paging stable.
             sa.case((TcgCard.name.ilike(f"{q}%"), 0), else_=1),
             TcgCard.name,
+            TcgCard.id,
         )
+        .offset(offset)
         .limit(limit)
     ).all()
 
     if rows:
         return [_card_result_from_model(row) for row in rows]
 
-    return _pokemon_tcg_search(q, limit)
+    # Only fall back to the public API on the first page.
+    if offset == 0:
+        return _pokemon_tcg_search(q, limit)
+    return []
 
 
 def _card_result_from_model(row: TcgCard) -> CardSearchResult:
