@@ -103,6 +103,139 @@ body {
 
 .card-ratio { aspect-ratio: 5 / 7; }
 
+/* Holo */
+/* Foil sheen. Variant comes from data-variant, cursor position from --mx/--my. */
+
+.holo { position: relative; }
+
+.holo-sheen {
+  position: absolute;
+  inset: 0;
+  z-index: 2;
+  border-radius: inherit;
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity 0.22s ease;
+}
+
+.holo:not(.holo-static):hover .holo-sheen,
+.holo:not(.holo-static):focus-within .holo-sheen {
+  opacity: 1;
+}
+
+/* SIR: rainbow sweep across the whole card. */
+.holo[data-variant="sir"] .holo-sheen {
+  background:
+    radial-gradient(circle at var(--mx, 50%) var(--my, 50%),
+      rgba(255, 255, 255, 0.28), rgba(255, 255, 255, 0) 50%),
+    linear-gradient(115deg,
+      transparent 25%,
+      rgba(255, 70, 160, 0.34) 38%,
+      rgba(140, 110, 255, 0.31) 46%,
+      rgba(70, 200, 255, 0.34) 54%,
+      rgba(100, 255, 160, 0.31) 62%,
+      rgba(255, 220, 100, 0.34) 70%,
+      transparent 82%);
+  background-size: 100% 100%, 220% 220%;
+  background-position: center, var(--mx, 50%) var(--my, 50%);
+  mix-blend-mode: screen;
+}
+
+/* Full art: white sweep across the whole card. */
+.holo[data-variant="full"] .holo-sheen {
+  background:
+    radial-gradient(circle at var(--mx, 50%) var(--my, 50%),
+      rgba(255, 255, 255, 0.22), rgba(255, 255, 255, 0) 55%),
+    linear-gradient(115deg,
+      transparent 20%,
+      rgba(255, 255, 255, 0.10) 40%,
+      rgba(255, 255, 255, 0.30) 47%,
+      rgba(255, 255, 255, 0.62) 50%,
+      rgba(255, 255, 255, 0.30) 53%,
+      rgba(255, 255, 255, 0.10) 60%,
+      transparent 80%);
+  background-size: 100% 100%, 200% 200%;
+  background-position: center, var(--mx, 50%) var(--my, 50%);
+  mix-blend-mode: screen;
+}
+
+/* Holo and reverse holo: faint white sheen, masked to a region below. */
+.holo[data-variant="holo"] .holo-sheen,
+.holo[data-variant="reverse_holo"] .holo-sheen {
+  background: linear-gradient(115deg,
+    transparent 32%,
+    rgba(255, 255, 255, 0.06) 45%,
+    rgba(255, 255, 255, 0.22) 50%,
+    rgba(255, 255, 255, 0.06) 55%,
+    transparent 68%);
+  background-size: 200% 200%;
+  background-position: var(--mx, 50%) var(--my, 50%);
+  mix-blend-mode: screen;
+}
+
+/* Holo: sheen over the artwork only. Feathered edges avoid a hard rectangle. */
+.holo[data-variant="holo"] .holo-sheen {
+  -webkit-mask:
+    linear-gradient(to right, transparent 3%, #000 12%, #000 88%, transparent 97%),
+    linear-gradient(to bottom, transparent 5%, #000 14%, #000 50%, transparent 59%);
+  -webkit-mask-composite: source-in;
+  mask:
+    linear-gradient(to right, transparent 3%, #000 12%, #000 88%, transparent 97%),
+    linear-gradient(to bottom, transparent 5%, #000 14%, #000 50%, transparent 59%);
+  mask-composite: intersect;
+}
+
+/* Reverse holo: sheen on the border only. */
+.holo[data-variant="reverse_holo"] .holo-sheen {
+  -webkit-mask:
+    linear-gradient(to right, #000 3%, transparent 12%, transparent 88%, #000 97%),
+    linear-gradient(to bottom, #000 5%, transparent 14%, transparent 50%, #000 59%);
+  mask:
+    linear-gradient(to right, #000 3%, transparent 12%, transparent 88%, #000 97%),
+    linear-gradient(to bottom, #000 5%, transparent 14%, transparent 50%, #000 59%);
+}
+
+/* Reduced motion: static sheen, no tracking. */
+@media (prefers-reduced-motion: reduce) {
+  .holo-sheen { transition: none; }
+}
+
+.holo-static .holo-sheen { opacity: 0.5; }
+
+.holo-static[data-variant="sir"] .holo-sheen {
+  background: linear-gradient(115deg,
+    transparent 30%,
+    rgba(255, 0, 140, 0.28) 45%,
+    rgba(0, 220, 255, 0.28) 55%,
+    rgba(255, 220, 60, 0.28) 65%,
+    transparent 78%);
+  background-size: 100% 100%;
+  background-position: center;
+}
+
+.holo-static[data-variant="full"] .holo-sheen {
+  background: linear-gradient(115deg,
+    transparent 34%,
+    rgba(255, 255, 255, 0.14) 46%,
+    rgba(255, 255, 255, 0.4) 50%,
+    rgba(255, 255, 255, 0.14) 54%,
+    transparent 66%);
+  background-size: 100% 100%;
+  background-position: center;
+}
+
+.holo-static[data-variant="holo"] .holo-sheen,
+.holo-static[data-variant="reverse_holo"] .holo-sheen {
+  background: linear-gradient(115deg,
+    transparent 38%,
+    rgba(255, 255, 255, 0.06) 47%,
+    rgba(255, 255, 255, 0.18) 50%,
+    rgba(255, 255, 255, 0.06) 53%,
+    transparent 62%);
+  background-size: 100% 100%;
+  background-position: center;
+}
+
 /* Dual-range price slider: two <input type="range"> stacked on one track.
    The inputs themselves ignore pointer events so the top one can't block the
    bottom's thumb; only the thumbs are interactive, which keeps both grabbable

@@ -30,6 +30,7 @@ class ListingCardResponse(BaseModel):
     condition: str | None
     language: str | None
     holo_type: HoloType
+    full_art: bool = False
     image_url: str | None = None
 
 

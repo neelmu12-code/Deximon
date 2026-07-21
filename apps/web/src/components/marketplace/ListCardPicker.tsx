@@ -27,6 +27,7 @@ function toSlot(card: BackendOwnedCard): NonNullable<CardSlot> {
     condition: card.condition,
     language: card.language,
     holo_type: card.holo_type,
+    full_art: card.full_art,
     image: imageFor(card) ?? "",
   };
 }

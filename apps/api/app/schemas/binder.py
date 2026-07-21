@@ -16,6 +16,7 @@ class OwnedCardCreate(BaseModel):
     condition: str | None = Field(default=None, max_length=20)
     language: str | None = Field(default=None, max_length=10)
     holo_type: HoloType = "normal"
+    full_art: bool = False
     image_url: str | None = Field(default=None, max_length=500)
     notes: str | None = Field(default=None, max_length=500)
     # When false, the card is persisted without being auto-placed into a binder
@@ -35,6 +36,7 @@ class OwnedCardResponse(BaseModel):
     condition: str | None
     language: str | None
     holo_type: HoloType
+    full_art: bool
     image_url: str | None
     notes: str | None
     created_at: datetime
@@ -47,6 +49,7 @@ class OwnedCardUpdate(BaseModel):
     condition: str | None = Field(default=None, max_length=20)
     language: str | None = Field(default=None, max_length=10)
     holo_type: HoloType | None = None
+    full_art: bool | None = None
     notes: str | None = Field(default=None, max_length=500)
 
 

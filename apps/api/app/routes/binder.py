@@ -49,6 +49,7 @@ def _card_response(card: Card) -> OwnedCardResponse:
         condition=card.condition,
         language=card.language,
         holo_type=_holo_type(card),
+        full_art=card.is_full_art,
         image_url=card.image_url,
         notes=card.notes,
         created_at=card.created_at,
@@ -191,6 +192,7 @@ def create_owned_card(
         language=payload.language,
         is_holo=payload.holo_type == "holo",
         is_reverse_holo=payload.holo_type == "reverse_holo",
+        is_full_art=payload.full_art,
         image_url=payload.image_url,
         notes=payload.notes,
     )
@@ -217,6 +219,10 @@ def update_owned_card(
         holo_type = updates.pop("holo_type")
         card.is_holo = holo_type == "holo"
         card.is_reverse_holo = holo_type == "reverse_holo"
+
+    # full_art maps to the is_full_art column.
+    if "full_art" in updates:
+        card.is_full_art = updates.pop("full_art")
 
     for field, value in updates.items():
         setattr(card, field, value)

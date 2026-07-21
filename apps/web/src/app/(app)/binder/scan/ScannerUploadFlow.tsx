@@ -194,6 +194,7 @@ async function persistCard(identity: CardIdentity, details: CardDetails): Promis
       condition: details.condition,
       language: details.language,
       holo_type: details.holo_type,
+      full_art: details.full_art,
       image_url: identity.image_url ?? null,
     },
   });

@@ -77,6 +77,19 @@ export function ConfirmCardFields({
         </select>
       </label>
 
+      <label className="flex cursor-pointer items-center gap-2.5 self-end pb-2.5 md:col-span-2">
+        <input
+          type="checkbox"
+          checked={value.full_art}
+          onChange={(e) => onChange({ ...value, full_art: e.target.checked })}
+          className="h-4 w-4 rounded border-hair bg-surface2 accent-dx-red"
+        />
+        <span className="text-sm text-ink">
+          Full art
+          <span className="text-ink3"> — artwork covers the whole card (full-art promos, SIRs)</span>
+        </span>
+      </label>
+
       <label className="block">
         <span className={LABEL}>Condition</span>
         <select
