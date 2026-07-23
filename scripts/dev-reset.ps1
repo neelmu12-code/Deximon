@@ -15,6 +15,7 @@ if (-not $Force) {
 docker compose down -v
 docker compose up -d --build postgres redis api web scanner
 docker compose exec -T api alembic upgrade head
+docker compose exec -T api python -m app.scripts.load_tcg_cards
 docker compose exec -T api python -m app.scripts.seed
 
 Write-Host "Deximon local stack has been reset."
