@@ -9,6 +9,7 @@ import {
   useState,
   type ReactNode,
 } from "react";
+import type { BinderCoverConfig } from "./binderTypes";
 import { ApiError, fetchAPI } from "./fetchAPI";
 
 export type BinderVisibility = "public" | "private";
@@ -21,6 +22,7 @@ export type AuthUser = {
   bio: string | null;
   avatar_url: string | null;
   binder_visibility: BinderVisibility;
+  binder_cover: BinderCoverConfig | null;
   location: string | null;
   twitter_handle: string | null;
   instagram_handle: string | null;
@@ -35,6 +37,7 @@ export type PublicProfile = {
   bio: string | null;
   avatar_url: string | null;
   binder_visibility: BinderVisibility;
+  binder_cover?: BinderCoverConfig | null;
   location: string | null;
   twitter_handle: string | null;
   instagram_handle: string | null;
@@ -67,6 +70,7 @@ export type ProfileUpdateInput = {
   location?: string | null;
   twitter_handle?: string | null;
   instagram_handle?: string | null;
+  binder_cover?: BinderCoverConfig | null;
 };
 
 type AuthContextValue = {

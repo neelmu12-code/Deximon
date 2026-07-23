@@ -3,7 +3,7 @@
 import { useAuth } from "@/lib/auth";
 import { fetchAPI } from "@/lib/fetchAPI";
 import { useRouter } from "next/navigation";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { BinderSpread } from "@/components/binder/BinderSpread";
 import { CardDetailPanel } from "@/components/binder/CardDetailPanel";
 import { ConfirmCardModal } from "@/components/binder/ConfirmCardModal";
@@ -21,7 +21,6 @@ import { LISTING_PAGE_LIMIT } from "@/lib/marketplace";
 
 const STORAGE_KEYS = {
   pages: "deximon_binder_pages",
-  cover: "deximon_binder_cover",
 } as const;
 
 type BackendListing = {
@@ -72,16 +71,26 @@ function placeCardAt(
 
 export default function BinderPage() {
   const router = useRouter();
-  const { user } = useAuth();
+  const { user, updateProfile } = useAuth();
 
   const [pages, setPages] = useState<CardSlot[][]>(
     () => [[...Array(9)].map(() => null) as CardSlot[]]
   );
   const [cover, setCover] = useState<BinderCoverConfig>(DEFAULT_COVER);
+  // Load the saved cover once, the first time the user object is available.
+  // Guarded so a later profile refresh (e.g. after saving) doesn't overwrite
+  // edits the user is still previewing.
+  const coverLoadedRef = useRef(false);
+
+  useEffect(() => {
+    if (user && !coverLoadedRef.current) {
+      setCover(user.binder_cover ?? DEFAULT_COVER);
+      coverLoadedRef.current = true;
+    }
+  }, [user]);
 
   useEffect(() => {
     setPages(loadFromStorage(STORAGE_KEYS.pages, [[...Array(9)].map(() => null) as CardSlot[]]));
-    setCover(loadFromStorage(STORAGE_KEYS.cover, DEFAULT_COVER));
 
     let cancelled = false;
     fetchAPI<BackendBinderResponse>("/binder/me")
@@ -131,17 +140,24 @@ export default function BinderPage() {
   const [confirmError, setConfirmError] = useState<string | null>(null);
   const [detailCard, setDetailCard] = useState<NonNullable<CardSlot> | null>(null);
   const [saved, setSaved] = useState(false);
+  const [saving, setSaving] = useState(false);
 
   const cardCount = pages.flat().filter(Boolean).length;
   const pageCount = pages.length;
 
-  function handleSave() {
+  // Card placement already persists via the binder slot/move endpoints, so the
+  // only thing this saves is the cover config (PATCH /profiles/me). The pages
+  // localStorage write is kept as a fast offline paint before /binder/me returns.
+  async function handleSave() {
+    setSaving(true);
     localStorage.setItem(STORAGE_KEYS.pages, JSON.stringify(pages));
-    localStorage.setItem(STORAGE_KEYS.cover, JSON.stringify(cover));
-    setSaved(true);
-    setTimeout(() => setSaved(false), 2000);
-    // TODO (backend): replace with PATCH /profiles/me { binder_pages, binder_cover }
-    // once the backend adds JSONB columns for binder pages and cover.
+    try {
+      await updateProfile({ binder_cover: cover });
+      setSaved(true);
+      setTimeout(() => setSaved(false), 2000);
+    } finally {
+      setSaving(false);
+    }
   }
 
   const handleAdd = useCallback((pageIdx: number, slotIdx: number) => {
@@ -277,11 +293,12 @@ export default function BinderPage() {
           <button
             type="button"
             onClick={handleSave}
-            className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-medium text-white transition-all ${
+            disabled={saving}
+            className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-medium text-white transition-all disabled:opacity-60 ${
               saved ? "bg-dx-green" : "bg-dx-red hover:bg-dx-red-hover"
             }`}
           >
-            {saved ? "Saved ✓" : "Save changes"}
+            {saved ? "Saved ✓" : saving ? "Saving…" : "Save changes"}
           </button>
         </div>
       </div>

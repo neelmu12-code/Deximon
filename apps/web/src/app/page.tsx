@@ -402,10 +402,16 @@ function Footer() {
       <div className="max-w-[1280px] mx-auto px-6 py-10 flex flex-wrap items-center justify-between gap-4">
         <Wordmark size="sm" />
         <nav className="flex items-center gap-5 text-[12px] text-ink2">
-          {["About", "Marketplace", "Terms", "Privacy", "Contact"].map((l) => (
-            <a key={l} href="#" className="hover:text-ink transition-colors">
-              {l}
-            </a>
+          {[
+            { label: "About", href: "#trust" },
+            { label: "Marketplace", href: "/market" },
+            { label: "Terms", href: "/terms" },
+            { label: "Privacy", href: "/privacy" },
+            { label: "Contact", href: "mailto:hello@deximon.app" },
+          ].map((l) => (
+            <Link key={l.label} href={l.href} className="hover:text-ink transition-colors">
+              {l.label}
+            </Link>
           ))}
         </nav>
         <div className="text-[11px] text-ink3">

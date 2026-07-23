@@ -5,6 +5,7 @@ from __future__ import annotations
 
 from sqlalchemy.orm import Session
 
+from app.core.security import hash_password
 from app.db.session import SessionLocal
 from app.models import (
     BinderPage,
@@ -16,12 +17,19 @@ from app.models import (
     User,
 )
 
+# Shared password for the demo accounts. Meets the 8-char minimum the register
+# endpoint enforces, so these accounts can log in through the normal form.
+SEED_PASSWORD = "deximon123"
+
 
 def _get_or_create_user(db: Session, email: str, username: str) -> User:
     existing = db.query(User).filter(User.email == email).one_or_none()
     if existing is not None:
+        # Backfill a real hash so accounts seeded before this change (which used a
+        # non-verifiable sentinel) can actually log in.
+        existing.password_hash = hash_password(SEED_PASSWORD)
         return existing
-    user = User(email=email, username=username, password_hash="!seed!")
+    user = User(email=email, username=username, password_hash=hash_password(SEED_PASSWORD))
     db.add(user)
     db.flush()
     db.add(Profile(user_id=user.id, display_name=username.title(), binder_public=True))
@@ -128,6 +136,7 @@ def seed() -> None:
         db.commit()
         print(f"seed: users={db.query(User).count()} cards={db.query(Card).count()} "
               f"listings={db.query(Listing).count()}")
+        print(f"seed: demo login -> alice@example.com / bob@example.com  (password: {SEED_PASSWORD})")
     finally:
         db.close()
 

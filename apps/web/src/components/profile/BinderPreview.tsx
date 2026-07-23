@@ -2,6 +2,7 @@
 
 import Image from "next/image";
 import { useState } from "react";
+import { COVER_COLORS, DEFAULT_COVER, type BinderCoverConfig } from "@/lib/binderTypes";
 import type { HoloType } from "@/lib/cardDetails";
 
 // Binder teammate: replace `pages` prop with data fetched from the binder API.
@@ -24,6 +25,8 @@ export type CardSlot = {
 type Props = {
   pages?: CardSlot[][];
   binderIsPublic?: boolean;
+  cover?: BinderCoverConfig | null;
+  username?: string;
 };
 
 const STATUS_COLORS = {
@@ -32,8 +35,24 @@ const STATUS_COLORS = {
   Sold: "text-ink3",
 } as const;
 
-export function BinderPreview({ pages = [], binderIsPublic = true }: Props) {
+// Persistent status dot shown on the top-right of a card that's on the market.
+const STATUS_DOT = {
+  Available: "bg-dx-green",
+  "On Hold": "bg-dx-gold",
+  Sold: "bg-ink3",
+} as const;
+
+function coverBackground(cfg: BinderCoverConfig): string {
+  const color = COVER_COLORS.find((c) => c.id === cfg.colorId) ?? COVER_COLORS[0];
+  const gradient = `linear-gradient(160deg, ${color.a} 0%, ${color.b} 55%, ${color.c} 100%)`;
+  if (cfg.type === "image" && cfg.imageUrl) return `url(${cfg.imageUrl}) center/cover`;
+  return gradient;
+}
+
+export function BinderPreview({ pages = [], binderIsPublic = true, cover, username }: Props) {
+  const [open, setOpen] = useState(false);
   const [pageIdx, setPageIdx] = useState(0);
+  const coverCfg = cover ?? DEFAULT_COVER;
 
   const visibilityChip = (
     <span
@@ -50,15 +69,20 @@ export function BinderPreview({ pages = [], binderIsPublic = true }: Props) {
     </span>
   );
 
-  // Private binder
+  const header = (right?: React.ReactNode) => (
+    <div className="flex items-center gap-3 mb-4">
+      <div className="text-[11px] uppercase tracking-[0.22em] text-ink3">The Binder</div>
+      <div className="flex-1 h-px bg-hair" />
+      {right}
+      {visibilityChip}
+    </div>
+  );
+
+  // Private binder — never reveals contents.
   if (!binderIsPublic) {
     return (
       <div>
-        <div className="flex items-center gap-3 mb-4">
-          <div className="text-[11px] uppercase tracking-[0.22em] text-ink3">The Binder</div>
-          <div className="flex-1 h-px bg-hair" />
-          {visibilityChip}
-        </div>
+        {header()}
         <div
           className="rounded-xl border border-[#2E2018] flex items-center justify-center py-20"
           style={{ background: "linear-gradient(180deg, #181210 0%, #120D09 100%)" }}
@@ -83,15 +107,81 @@ export function BinderPreview({ pages = [], binderIsPublic = true }: Props) {
     );
   }
 
-  // Public binder, no cards yet
+  // Closed cover — the default view on someone's profile. Click to open.
+  if (!open) {
+    return (
+      <div>
+        {header()}
+        <div
+          className="rounded-xl border border-[#2E2018] flex items-center justify-center py-10 md:py-14"
+          style={{ background: "linear-gradient(180deg, #181210 0%, #120D09 100%)" }}
+        >
+          <button
+            type="button"
+            onClick={() => setOpen(true)}
+            aria-label="Open binder"
+            className="group relative block"
+          >
+            {/* Closed book cover */}
+            <div
+              className="relative w-[240px] md:w-[280px] aspect-[3/4] rounded-r-xl rounded-l-sm overflow-hidden transition-transform duration-300 group-hover:-translate-y-1 group-hover:rotate-[0.4deg]"
+              style={{
+                background: coverBackground(coverCfg),
+                boxShadow:
+                  "0 20px 50px rgba(0,0,0,0.6), 0 6px 14px rgba(0,0,0,0.5), inset 0 0 60px rgba(0,0,0,0.35)",
+              }}
+            >
+              {/* Spine */}
+              <div
+                className="absolute inset-y-0 left-0 w-4"
+                style={{
+                  background:
+                    "linear-gradient(90deg, rgba(0,0,0,0.55) 0%, rgba(0,0,0,0.15) 60%, rgba(255,255,255,0.05) 100%)",
+                }}
+              />
+              {/* Inner border emboss */}
+              <div className="absolute inset-3 rounded-md border border-white/10" />
+              {/* Sheen */}
+              <div className="absolute inset-0 bg-gradient-to-br from-white/10 via-transparent to-black/25 pointer-events-none" />
+              {/* Embossed name */}
+              {coverCfg.showName && username && (
+                <div className="absolute inset-x-0 bottom-8 text-center px-4">
+                  <div className="script gold-foil text-2xl md:text-3xl leading-tight truncate">
+                    {username}&apos;s
+                  </div>
+                  <div className="script gold-foil text-sm md:text-base opacity-80">binder</div>
+                </div>
+              )}
+            </div>
+
+            {/* Open hint */}
+            <div className="mt-4 text-center text-[11px] uppercase tracking-[0.2em] text-white/40 group-hover:text-white/70 transition-colors">
+              Click to open
+            </div>
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  const closeButton = (
+    <button
+      type="button"
+      onClick={() => setOpen(false)}
+      className="inline-flex items-center gap-1.5 rounded-md border border-hair px-2.5 py-1 text-[11px] text-ink2 hover:text-ink hover:bg-surface2 transition-colors"
+    >
+      <svg viewBox="0 0 16 16" className="h-3 w-3" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">
+        <path d="M5 3 10 8l-5 5" />
+      </svg>
+      Close
+    </button>
+  );
+
+  // Opened, but no cards yet.
   if (pages.length === 0) {
     return (
       <div>
-        <div className="flex items-center gap-3 mb-4">
-          <div className="text-[11px] uppercase tracking-[0.22em] text-ink3">The Binder</div>
-          <div className="flex-1 h-px bg-hair" />
-          {visibilityChip}
-        </div>
+        {header(closeButton)}
         <div
           className="rounded-xl border border-[#2E2018] flex items-center justify-center py-20"
           style={{ background: "linear-gradient(180deg, #181210 0%, #120D09 100%)" }}
@@ -116,16 +206,12 @@ export function BinderPreview({ pages = [], binderIsPublic = true }: Props) {
     );
   }
 
-  // Public binder with cards
+  // Opened, with cards.
   const currentPage = pages[pageIdx] ?? [];
 
   return (
     <div>
-      <div className="flex items-center gap-3 mb-4">
-        <div className="text-[11px] uppercase tracking-[0.22em] text-ink3">The Binder</div>
-        <div className="flex-1 h-px bg-hair" />
-        {visibilityChip}
-      </div>
+      {header(closeButton)}
 
       <div
         className="rounded-xl border border-[#2E2018]"
@@ -148,6 +234,12 @@ export function BinderPreview({ pages = [], binderIsPublic = true }: Props) {
                       sizes="(max-width: 1280px) 25vw, 300px"
                     />
                     <div className="absolute inset-0 bg-gradient-to-br from-white/5 via-transparent to-black/15 pointer-events-none" />
+                    {/* Marketplace status dot */}
+                    {slot.listed && (
+                      <span
+                        className={`absolute top-1.5 right-1.5 w-3 h-3 rounded-full ring-2 ring-black/50 ${STATUS_DOT[slot.listed.status]}`}
+                      />
+                    )}
                   </div>
 
                   <div className="absolute left-1/2 -translate-x-1/2 bottom-full mb-2 opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none z-30 whitespace-nowrap">

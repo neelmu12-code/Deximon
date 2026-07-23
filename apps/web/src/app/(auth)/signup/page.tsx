@@ -162,8 +162,8 @@ export default function SignupPage() {
           {/* Fine print */}
           <p className="text-[11px] text-ink3 leading-relaxed">
             By creating an account you agree to our{" "}
-            <a href="#" className="text-ink2 hover:underline">Terms</a> and{" "}
-            <a href="#" className="text-ink2 hover:underline">Privacy Policy</a>.
+            <a href="/terms" target="_blank" rel="noopener noreferrer" className="text-ink2 hover:underline">Terms</a> and{" "}
+            <a href="/privacy" target="_blank" rel="noopener noreferrer" className="text-ink2 hover:underline">Privacy Policy</a>.
           </p>
 
           {/* Submit */}

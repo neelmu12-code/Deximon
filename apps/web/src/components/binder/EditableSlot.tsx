@@ -1,6 +1,13 @@
 import Image from "next/image";
 import type { CardSlot } from "@/lib/binderTypes";
 
+// Small status dot shown top-right of a card that has a marketplace listing.
+const LISTED_DOT: Record<"Available" | "On Hold" | "Sold", string> = {
+  Available: "bg-dx-green",
+  "On Hold": "bg-dx-gold",
+  Sold: "bg-ink3",
+};
+
 type Props = {
   card: CardSlot;
   pageIdx: number;
@@ -59,6 +66,14 @@ export function EditableSlot({
           unoptimized
         />
         <div className="absolute inset-0 sleeve-sheen pointer-events-none" />
+        {card.listed && (
+          <span
+            className={`absolute top-1 right-1 z-[5] w-2.5 h-2.5 rounded-full ring-2 ring-black/50 ${
+              LISTED_DOT[card.listed.status]
+            } group-hover:opacity-0 transition-opacity`}
+            title={`Listed · ${card.listed.status}`}
+          />
+        )}
         <button
           type="button"
           onClick={(e) => {
