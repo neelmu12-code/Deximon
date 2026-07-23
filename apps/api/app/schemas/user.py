@@ -1,5 +1,5 @@
 from datetime import datetime
-from typing import Literal
+from typing import Any, Literal
 from uuid import UUID
 
 from pydantic import BaseModel, Field, HttpUrl, field_validator
@@ -13,6 +13,7 @@ class ProfileResponse(BaseModel):
     bio: str | None
     avatar_url: str | None
     binder_visibility: BinderVisibility
+    binder_cover: dict[str, Any] | None = None
     location: str | None
     twitter_handle: str | None
     instagram_handle: str | None
@@ -44,6 +45,7 @@ class ProfileUpdateRequest(BaseModel):
     location: str | None = Field(default=None, max_length=100)
     twitter_handle: str | None = Field(default=None, max_length=50)
     instagram_handle: str | None = Field(default=None, max_length=50)
+    binder_cover: dict[str, Any] | None = None
 
     @field_validator("display_name", "bio")
     @classmethod

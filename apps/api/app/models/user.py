@@ -1,7 +1,9 @@
 from datetime import datetime
+from typing import Any
 from uuid import UUID, uuid4
 
-from sqlalchemy import Boolean, DateTime, ForeignKey, Index, String, func
+from sqlalchemy import JSON, Boolean, DateTime, ForeignKey, Index, String, func
+from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.dialects.postgresql import UUID as PG_UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -45,6 +47,12 @@ class Profile(Base):
     bio: Mapped[str | None] = mapped_column(String(500), nullable=True)
     avatar_url: Mapped[str | None] = mapped_column(String(500), nullable=True)
     binder_public: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
+    # Cover customization for the binder (colour/image + embossed-name toggle).
+    # Shape mirrors the frontend BinderCoverConfig; stored as JSONB so it can grow
+    # without a migration per field. Null means "use the client default".
+    binder_cover: Mapped[dict[str, Any] | None] = mapped_column(
+        JSON().with_variant(JSONB(), "postgresql"), nullable=True
+    )
     location: Mapped[str | None] = mapped_column(String(100), nullable=True)
     twitter_handle: Mapped[str | None] = mapped_column(String(50), nullable=True)
     instagram_handle: Mapped[str | None] = mapped_column(String(50), nullable=True)

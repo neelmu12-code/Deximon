@@ -15,6 +15,7 @@ import {
   formatPrice,
   type Listing,
   listingImageUrl,
+  type ListingStatus,
   listingStatusLabel,
 } from "@/lib/marketplace";
 import { avatarHue, userDisplayName } from "@/lib/userDisplay";
@@ -73,6 +74,44 @@ async function loadListings(username: string): Promise<Listing[]> {
   }
 }
 
+type ListedInfo = { price: number; status: "Available" | "On Hold" | "Sold" };
+
+function shortStatus(status: ListingStatus): "Available" | "On Hold" | "Sold" {
+  if (status === "on_hold") return "On Hold";
+  if (status === "sold") return "Sold";
+  return "Available";
+}
+
+// card_id -> listing summary for this seller, so binder cards that are on the
+// market can show a status dot. Capped at 50; a card whose listing has scrolled
+// past that window just renders without a dot.
+async function loadListedByCard(username: string): Promise<Map<string, ListedInfo>> {
+  try {
+    const data = await fetchAPI<Listing[]>(
+      `/market/listings?seller=${encodeURIComponent(username)}&limit=50`
+    );
+    const map = new Map<string, ListedInfo>();
+    for (const listing of data ?? []) {
+      map.set(listing.card_id, {
+        price: listing.asking_price ?? 0,
+        status: shortStatus(listing.status),
+      });
+    }
+    return map;
+  } catch {
+    return new Map();
+  }
+}
+
+function attachListed(pages: CardSlot[][], listed: Map<string, ListedInfo>): CardSlot[][] {
+  if (listed.size === 0) return pages;
+  return pages.map((page) =>
+    page.map((slot) =>
+      slot && listed.has(slot.id) ? { ...slot, listed: listed.get(slot.id) } : slot,
+    ),
+  );
+}
+
 export async function generateMetadata({ params }: { params: Promise<Params> }) {
   const { username } = await params;
   return { title: `@${username} - Deximon` };
@@ -83,11 +122,13 @@ export default async function PublicProfilePage({ params }: { params: Promise<Pa
   const profile = await loadProfile(username);
   const name = userDisplayName(profile);
   const binderIsPublic = profile.binder_visibility === "public";
-  const [binderPages, profileStats, listings] = await Promise.all([
+  const [binderPagesRaw, profileStats, listings, listedByCard] = await Promise.all([
     binderIsPublic ? loadBinder(username) : Promise.resolve<CardSlot[][]>([]),
     loadStats(username),
     loadListings(username),
+    binderIsPublic ? loadListedByCard(username) : Promise.resolve(new Map<string, ListedInfo>()),
   ]);
+  const binderPages = attachListed(binderPagesRaw, listedByCard);
 
   const numberOrDash = (value: number | null | undefined) =>
     value == null ? "—" : value.toLocaleString();
@@ -188,7 +229,12 @@ export default async function PublicProfilePage({ params }: { params: Promise<Pa
       <div className="grid grid-cols-12 gap-6">
         {/* binder — left 9 cols */}
         <div className="col-span-12 xl:col-span-9">
-          <BinderPreview pages={binderPages} binderIsPublic={binderIsPublic} />
+          <BinderPreview
+            pages={binderPages}
+            binderIsPublic={binderIsPublic}
+            cover={profile.binder_cover}
+            username={profile.username}
+          />
         </div>
 
         {/* right rail — 3 cols */}

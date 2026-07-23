@@ -40,6 +40,7 @@ def _profile_response(user: User, db: Session) -> ProfileResponse:
         bio=user.profile.bio,
         avatar_url=user.profile.avatar_url,
         binder_visibility="public" if user.profile.binder_public else "private",
+        binder_cover=user.profile.binder_cover,
         location=user.profile.location,
         twitter_handle=user.profile.twitter_handle,
         instagram_handle=user.profile.instagram_handle,
