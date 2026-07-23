@@ -1,5 +1,6 @@
 import Image from "next/image";
 import type { CardSlot } from "@/lib/binderTypes";
+import { HoloCard } from "./HoloCard";
 
 // Small status dot shown top-right of a card that has a marketplace listing.
 const LISTED_DOT: Record<"Available" | "On Hold" | "Sold", string> = {
@@ -39,7 +40,10 @@ export function EditableSlot({
 }: Props) {
   if (card) {
     return (
-      <div
+      <HoloCard
+        holoType={card.holo_type}
+        rarity={card.rarity}
+        fullArt={card.full_art}
         draggable
         onDragStart={() => onDragStart(pageIdx, slotIdx)}
         onDragOver={(e) => {
@@ -85,7 +89,7 @@ export function EditableSlot({
         >
           ×
         </button>
-      </div>
+      </HoloCard>
     );
   }
 

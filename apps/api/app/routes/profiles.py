@@ -74,24 +74,28 @@ def public_profile(username: str, db: DbSession) -> ProfileResponse:
 
 @router.get("/{username}/stats", response_model=ProfileStatsResponse)
 def profile_stats(username: str, db: DbSession) -> ProfileStatsResponse:
-    user_id = db.scalar(
-        select(User.id).where(
+    user = db.scalar(
+        select(User)
+        .options(selectinload(User.profile))
+        .where(
             func.lower(User.username) == username.lower(), User.is_active.is_(True)
         )
     )
-    if user_id is None:
+    if user is None or user.profile is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Profile not found")
 
-    cards_owned = (
-        db.scalar(select(func.count()).select_from(Card).where(Card.owner_id == user_id)) or 0
-    )
+    cards_owned: int | None = None
+    if user.profile.binder_public:
+        cards_owned = (
+            db.scalar(select(func.count()).select_from(Card).where(Card.owner_id == user.id)) or 0
+        )
     # "Listed" is what's currently on the market — available or on hold, not sold/cancelled.
     cards_listed = (
         db.scalar(
             select(func.count())
             .select_from(Listing)
             .where(
-                Listing.seller_id == user_id,
+                Listing.seller_id == user.id,
                 Listing.status.in_([ListingStatus.AVAILABLE, ListingStatus.ON_HOLD]),
             )
         )
@@ -102,7 +106,7 @@ def profile_stats(username: str, db: DbSession) -> ProfileStatsResponse:
         db.scalar(
             select(func.count())
             .select_from(Listing)
-            .where(Listing.seller_id == user_id, Listing.status == ListingStatus.SOLD)
+            .where(Listing.seller_id == user.id, Listing.status == ListingStatus.SOLD)
         )
         or 0
     )

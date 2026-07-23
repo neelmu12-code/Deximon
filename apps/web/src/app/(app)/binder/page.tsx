@@ -216,6 +216,7 @@ export default function BinderPage() {
           condition: details.condition,
           language: details.language,
           holo_type: details.holo_type,
+          full_art: details.full_art,
           image_url: pendingCard.image || null,
           // Create the card unplaced, then assign it to the chosen slot below.
           place_in_binder: false,
@@ -238,6 +239,7 @@ export default function BinderPage() {
         condition: details.condition,
         language: details.language,
         holo_type: details.holo_type,
+        full_art: details.full_art,
         image: pendingCard.image,
       };
       setPages((prev) => placeCardAt(prev, target, newCard));

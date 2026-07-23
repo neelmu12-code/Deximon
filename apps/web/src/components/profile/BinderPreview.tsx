@@ -2,6 +2,8 @@
 
 import Image from "next/image";
 import { useState } from "react";
+import { EmptyState } from "@/components/ui/EmptyState";
+import { HoloCard } from "@/components/binder/HoloCard";
 import { COVER_COLORS, DEFAULT_COVER, type BinderCoverConfig } from "@/lib/binderTypes";
 import type { HoloType } from "@/lib/cardDetails";
 
@@ -19,6 +21,7 @@ export type CardSlot = {
   condition?: string | null;
   language?: string | null;
   holo_type?: HoloType | null;
+  full_art?: boolean;
   listed?: { listingId?: string; price: number; status: "Available" | "On Hold" | "Sold" };
 } | null;
 
@@ -182,26 +185,17 @@ export function BinderPreview({ pages = [], binderIsPublic = true, cover, userna
     return (
       <div>
         {header(closeButton)}
-        <div
-          className="rounded-xl border border-[#2E2018] flex items-center justify-center py-20"
-          style={{ background: "linear-gradient(180deg, #181210 0%, #120D09 100%)" }}
-        >
-          <div className="text-center space-y-2">
-            <svg
-              viewBox="0 0 24 24"
-              className="w-8 h-8 text-white/20 mx-auto"
-              fill="none"
-              stroke="currentColor"
-              strokeWidth="1.4"
-              strokeLinecap="round"
-              strokeLinejoin="round"
-            >
+        <EmptyState
+          title="No cards yet"
+          description="Scan a card or add one manually to start building this binder."
+          className="border-[#2E2018] bg-[#120D09]"
+          icon={
+            <svg viewBox="0 0 24 24" className="h-5 w-5" fill="none" stroke="currentColor" strokeWidth="1.4">
               <rect x="3" y="3" width="18" height="18" rx="2" />
               <path d="M3 9h18M9 21V9" />
             </svg>
-            <p className="text-white/30 text-sm">No cards in this binder yet.</p>
-          </div>
-        </div>
+          }
+        />
       </div>
     );
   }
@@ -222,7 +216,10 @@ export function BinderPreview({ pages = [], binderIsPublic = true, cover, userna
             {currentPage.map((slot, i) =>
               slot ? (
                 <div key={slot.id} className="relative group">
-                  <div
+                  <HoloCard
+                    holoType={slot.holo_type}
+                    rarity={slot.rarity}
+                    fullArt={slot.full_art}
                     className="relative aspect-[5/7] rounded-lg overflow-hidden transition-transform duration-200 group-hover:-translate-y-1.5"
                     style={{ boxShadow: "0 6px 16px rgba(0,0,0,0.55), 0 2px 4px rgba(0,0,0,0.4)" }}
                   >
@@ -234,13 +231,13 @@ export function BinderPreview({ pages = [], binderIsPublic = true, cover, userna
                       sizes="(max-width: 1280px) 25vw, 300px"
                     />
                     <div className="absolute inset-0 bg-gradient-to-br from-white/5 via-transparent to-black/15 pointer-events-none" />
-                    {/* Marketplace status dot */}
+                    {/* Marketplace status dot — above the holo sheen */}
                     {slot.listed && (
                       <span
-                        className={`absolute top-1.5 right-1.5 w-3 h-3 rounded-full ring-2 ring-black/50 ${STATUS_DOT[slot.listed.status]}`}
+                        className={`absolute top-1.5 right-1.5 z-20 w-3 h-3 rounded-full ring-2 ring-black/50 ${STATUS_DOT[slot.listed.status]}`}
                       />
                     )}
-                  </div>
+                  </HoloCard>
 
                   <div className="absolute left-1/2 -translate-x-1/2 bottom-full mb-2 opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none z-30 whitespace-nowrap">
                     <div className="bg-base/95 border border-hair rounded-md px-2.5 py-1.5 text-[11px] shadow-xl">
