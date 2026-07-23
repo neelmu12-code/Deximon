@@ -33,6 +33,8 @@ services:
     build:
       context: ./apps/api
       dockerfile: Dockerfile
+    command: ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000"]
+    restart: unless-stopped
     env_file:
       - .env
     environment:
@@ -47,42 +49,72 @@ services:
     ports:
       - "127.0.0.1:8000:8000"
     volumes:
-      - ./apps/api:/app
+      - ./apps/api/uploads:/app/uploads
+    healthcheck:
+      test: ["CMD", "curl", "--fail", "--silent", "http://localhost:8000/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
 
   scanner:
     build:
       context: ./apps/scanner
       dockerfile: Dockerfile
+    command: ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8001"]
+    restart: unless-stopped
     env_file:
       - .env
     ports:
       - "127.0.0.1:8001:8001"
     volumes:
-      - ./apps/scanner:/app
       - ./data/pokemon-tcg-data:/data/pokemon-tcg-data:ro
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "python",
+          "-c",
+          "import urllib.request; urllib.request.urlopen('http://localhost:8001/healthz', timeout=3)",
+        ]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
 
   web:
     build:
       context: ./apps/web
       dockerfile: Dockerfile
-      target: development
+      target: production
+      args:
+        NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL:-http://localhost:8000}
+        NEXT_PUBLIC_SCANNER_URL: ${NEXT_PUBLIC_SCANNER_URL:-http://localhost:8001}
+    restart: unless-stopped
     environment:
       NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL:-http://localhost:8000}
       NEXT_PUBLIC_SCANNER_URL: ${NEXT_PUBLIC_SCANNER_URL:-http://localhost:8001}
-      # Server-side (SSR/RSC) URL — uses Docker service name, not localhost
       API_URL: ${API_URL:-http://api:8000}
       SCANNER_URL: ${SCANNER_URL:-http://scanner:8001}
-      # Poll for file changes — Windows bind mounts don't deliver inotify events.
-      WATCHPACK_POLLING: "true"
-      CHOKIDAR_USEPOLLING: "true"
     depends_on:
-      - api
+      api:
+        condition: service_healthy
+      scanner:
+        condition: service_healthy
     ports:
       - "127.0.0.1:3000:3000"
-    volumes:
-      - ./apps/web:/app
-      - /app/node_modules
-      - /app/.next
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "node",
+          "-e",
+          "fetch('http://localhost:3000').then(r => { if (!r.ok) process.exit(1) }).catch(() => process.exit(1))",
+        ]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
 
 volumes:
   postgres_data:
