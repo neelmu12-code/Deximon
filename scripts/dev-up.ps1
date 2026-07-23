@@ -13,6 +13,7 @@ if ($Build) {
 }
 
 docker compose exec -T api alembic upgrade head
+docker compose exec -T api python -m app.scripts.load_tcg_cards
 
 Write-Host "Deximon is running:"
 Write-Host "  Web:     http://localhost:3000"

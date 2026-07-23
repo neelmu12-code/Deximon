@@ -38,8 +38,15 @@ If you prefer raw Docker commands, run migrations once after the API container i
 
 ```bash
 docker compose exec api alembic upgrade head
+docker compose exec api python -m app.scripts.load_tcg_cards   # ~20k card catalog
 docker compose exec api python -m app.scripts.seed
 ```
+
+`load_tcg_cards` populates the `tcg_cards` search catalog from a committed
+fixture (`app/scripts/data/tcg_cards.jsonl.gz`), so it runs offline and doesn't
+depend on the pokemontcg.io API. It's idempotent — skips if the catalog is
+already loaded. To refresh the fixture from upstream, see
+`app/scripts/build_tcg_fixture.py`.
 
 Useful local scripts:
 
