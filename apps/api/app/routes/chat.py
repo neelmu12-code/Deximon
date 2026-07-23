@@ -1,7 +1,15 @@
 from typing import Annotated
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, HTTPException, WebSocket, WebSocketDisconnect, status
+from fastapi import (
+    APIRouter,
+    Depends,
+    HTTPException,
+    Query,
+    WebSocket,
+    WebSocketDisconnect,
+    status,
+)
 from sqlalchemy import or_, select
 from sqlalchemy.orm import Session
 
@@ -18,9 +26,11 @@ from app.schemas.chat import (
     ConversationCreate,
     ConversationDetailResponse,
     ConversationResponse,
+    ListingStatusUpdate,
     MessageCreate,
     MessageResponse,
 )
+from app.services.listings import ensure_valid_transition, notify_listing_status_change
 from app.services.notifications import actor_meta, create_notification
 
 router = APIRouter(prefix="/conversations", tags=["chat"])
@@ -117,6 +127,7 @@ def _conversation_response(
         "seller_username": seller.username,
         "listing_card_name": card.name,
         "listing_status": listing.status,
+        "listing_buyer_id": listing.buyer_id,
         "last_message": last_message,
         "created_at": conversation.created_at,
     }
@@ -126,8 +137,16 @@ def _conversation_response(
 
 
 @router.get("", response_model=list[ConversationResponse])
-def list_conversations(current_user: CurrentUser, db: DbSession) -> list[ConversationResponse]:
-    conversations = db.scalars(
+def list_conversations(
+    current_user: CurrentUser,
+    db: DbSession,
+    listing_id: Annotated[UUID | None, Query()] = None,
+) -> list[ConversationResponse]:
+    """The caller's conversations, optionally narrowed to one listing.
+
+    Sellers use the filter to list who enquired when picking who they sold to.
+    """
+    stmt = (
         select(Conversation)
         .join(Listing, Conversation.listing_id == Listing.id)
         .where(
@@ -136,8 +155,10 @@ def list_conversations(current_user: CurrentUser, db: DbSession) -> list[Convers
                 Listing.seller_id == current_user.id,
             )
         )
-        .order_by(Conversation.created_at.desc())
     )
+    if listing_id is not None:
+        stmt = stmt.where(Conversation.listing_id == listing_id)
+    conversations = db.scalars(stmt.order_by(Conversation.created_at.desc()))
     return [
         response
         for conversation in conversations
@@ -192,6 +213,44 @@ def get_conversation(
 ) -> ConversationDetailResponse:
     conversation, listing, _card, _requester, _seller = _conversation_context(db, conversation_id)
     _require_participant(current_user, conversation, listing)
+    response = _conversation_response(db, conversation, include_messages=True)
+    if not isinstance(response, ConversationDetailResponse):
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Invalid response")
+    return response
+
+
+@router.patch("/{conversation_id}/listing-status", response_model=ConversationDetailResponse)
+async def update_conversation_listing_status(
+    conversation_id: UUID,
+    payload: ListingStatusUpdate,
+    current_user: CurrentUser,
+    db: DbSession,
+) -> ConversationDetailResponse:
+    """Seller-only control from inside a chat.
+
+    Marking the listing sold here records the other participant as the buyer, so
+    only they can review the seller afterwards. Pending/available toggle the
+    listing's visibility in the marketplace without closing the sale.
+    """
+    conversation, listing, _card, _requester, _seller = _conversation_context(db, conversation_id)
+    if listing.seller_id != current_user.id:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Only the seller can update the listing",
+        )
+
+    new_status = payload.status
+    ensure_valid_transition(listing.status, new_status)
+    old_status = listing.status
+    listing.status = new_status
+    if new_status == ListingStatus.SOLD:
+        listing.buyer_id = conversation.requester_id
+    db.commit()
+    db.refresh(listing)
+
+    if listing.status != old_status:
+        await notify_listing_status_change(db, listing, current_user)
+
     response = _conversation_response(db, conversation, include_messages=True)
     if not isinstance(response, ConversationDetailResponse):
         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Invalid response")

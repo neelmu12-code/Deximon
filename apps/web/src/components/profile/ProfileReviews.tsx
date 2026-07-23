@@ -3,20 +3,16 @@
 import Link from "next/link";
 import { useEffect, useState } from "react";
 import { useAuth } from "@/lib/auth";
-import { ApiError, fetchAPI } from "@/lib/fetchAPI";
-import type { ReviewList } from "@/lib/reviews";
+import { fetchAPI } from "@/lib/fetchAPI";
+import type { ReviewEligibility, ReviewList } from "@/lib/reviews";
 import { Stars } from "@/components/ui/Stars";
 
+// The API only accepts a review from the buyer of a completed sale, so the button
+// shows only for users it would accept and links to the review page for that sale.
 export function ProfileReviews({ username }: { username: string }) {
   const { user } = useAuth();
   const [data, setData] = useState<ReviewList | null>(null);
-  const [rating, setRating] = useState(5);
-  const [comment, setComment] = useState("");
-  const [open, setOpen] = useState(false);
-  const [submitting, setSubmitting] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-
-  const canReview = Boolean(user && user.username !== username);
+  const [eligibility, setEligibility] = useState<ReviewEligibility | null>(null);
 
   useEffect(() => {
     fetchAPI<ReviewList>(`/reviews/seller/${encodeURIComponent(username)}`)
@@ -24,37 +20,29 @@ export function ProfileReviews({ username }: { username: string }) {
       .catch(() => undefined);
   }, [username]);
 
-  async function submitReview() {
-    setSubmitting(true);
-    setError(null);
-    try {
-      await fetchAPI(`/reviews/seller/${encodeURIComponent(username)}`, {
-        method: "POST",
-        body: { rating, comment: comment.trim() || null },
-      });
-      const refreshed = await fetchAPI<ReviewList>(`/reviews/seller/${encodeURIComponent(username)}`);
-      setData(refreshed);
-      setOpen(false);
-      setComment("");
-    } catch (err) {
-      setError(err instanceof ApiError ? err.message : "Could not submit review.");
-    } finally {
-      setSubmitting(false);
+  useEffect(() => {
+    if (!user || user.username === username) {
+      setEligibility(null);
+      return;
     }
-  }
+    fetchAPI<ReviewEligibility>(`/reviews/seller/${encodeURIComponent(username)}/eligibility`)
+      .then((result) => setEligibility(result))
+      .catch(() => setEligibility(null));
+  }, [username, user]);
+
+  const canReview = Boolean(eligibility?.can_review && eligibility.listing_id);
 
   return (
     <div className="bg-surface border border-hair rounded-xl p-5 space-y-4">
       <div className="flex items-center justify-between gap-3">
         <div className="text-[11px] uppercase tracking-[0.22em] text-ink3">Seller reviews</div>
         {canReview && (
-          <button
-            type="button"
-            onClick={() => setOpen((v) => !v)}
+          <Link
+            href={`/review/${eligibility!.listing_id}`}
             className="text-[11px] text-dx-blue hover:underline"
           >
-            Leave a review
-          </button>
+            Leave a review →
+          </Link>
         )}
       </div>
 
@@ -62,42 +50,10 @@ export function ProfileReviews({ username }: { username: string }) {
         <Stars rating={data.avg_rating} reviews={data.review_count} />
       )}
 
-      {open && (
-        <div className="space-y-3 border border-hair rounded-lg p-3">
-          <label className="block text-sm">
-            Rating
-            <select
-              value={rating}
-              onChange={(e) => setRating(Number(e.target.value))}
-              className="mt-1 w-full rounded border border-hair bg-transparent px-3 py-2 text-sm"
-            >
-              {[5, 4, 3, 2, 1].map((value) => (
-                <option key={value} value={value}>
-                  {value} star{value === 1 ? "" : "s"}
-                </option>
-              ))}
-            </select>
-          </label>
-          <label className="block text-sm">
-            Comment
-            <textarea
-              value={comment}
-              onChange={(e) => setComment(e.target.value)}
-              rows={3}
-              className="mt-1 w-full rounded border border-hair bg-transparent px-3 py-2 text-sm"
-              placeholder="Optional"
-            />
-          </label>
-          {error && <p className="text-sm text-red-500">{error}</p>}
-          <button
-            type="button"
-            onClick={submitReview}
-            disabled={submitting}
-            className="rounded bg-neutral-900 px-4 py-2 text-sm font-medium text-white disabled:opacity-50 dark:bg-white dark:text-neutral-950"
-          >
-            {submitting ? "Submitting..." : "Submit review"}
-          </button>
-        </div>
+      {canReview && eligibility?.listing_card_name && (
+        <p className="text-[12px] text-ink3">
+          You bought {eligibility.listing_card_name} from @{username}.
+        </p>
       )}
 
       {!data || data.reviews.length === 0 ? (

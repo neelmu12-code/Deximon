@@ -1,4 +1,5 @@
 from typing import Annotated
+from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy import func, select
@@ -6,10 +7,17 @@ from sqlalchemy.orm import Session, selectinload
 
 from app.db.session import get_db
 from app.dependencies.auth import get_current_user
+from app.models.card import Card
+from app.models.listing import Listing, ListingStatus
 from app.models.notification import NotificationType
 from app.models.review import SellerReview
 from app.models.user import User
-from app.schemas.review import ReviewCreate, ReviewListResponse, ReviewResponse
+from app.schemas.review import (
+    ReviewCreate,
+    ReviewEligibilityResponse,
+    ReviewListResponse,
+    ReviewResponse,
+)
 from app.services.notifications import actor_meta, create_notification
 from app.services.reviews import seller_rating
 
@@ -42,6 +50,33 @@ def _get_seller(db: Session, username: str) -> User:
     return seller
 
 
+def _completed_purchase(db: Session, buyer_id: UUID, seller_id: UUID) -> Listing | None:
+    """The sale, if any, that entitles this buyer to review this seller.
+
+    A pair can trade more than once but carries only one review, so where there
+    are several sales the most recent is the one the review hangs off.
+    """
+    return db.scalar(
+        select(Listing)
+        .where(
+            Listing.seller_id == seller_id,
+            Listing.buyer_id == buyer_id,
+            Listing.status == ListingStatus.SOLD,
+        )
+        .order_by(Listing.updated_at.desc())
+        .limit(1)
+    )
+
+
+def _existing_review_id(db: Session, reviewer_id: UUID, seller_id: UUID) -> UUID | None:
+    return db.scalar(
+        select(SellerReview.id).where(
+            SellerReview.reviewer_id == reviewer_id,
+            SellerReview.seller_id == seller_id,
+        )
+    )
+
+
 @router.get("/seller/{username}", response_model=ReviewListResponse)
 def list_seller_reviews(username: str, db: DbSession) -> ReviewListResponse:
     seller = _get_seller(db, username)
@@ -58,6 +93,31 @@ def list_seller_reviews(username: str, db: DbSession) -> ReviewListResponse:
     )
 
 
+@router.get("/seller/{username}/eligibility", response_model=ReviewEligibilityResponse)
+def seller_review_eligibility(
+    username: str,
+    current_user: CurrentUser,
+    db: DbSession,
+) -> ReviewEligibilityResponse:
+    """Lets the UI offer a review form only to buyers the POST would accept."""
+    seller = _get_seller(db, username)
+    if seller.id == current_user.id:
+        return ReviewEligibilityResponse(can_review=False, already_reviewed=False)
+
+    already_reviewed = _existing_review_id(db, current_user.id, seller.id) is not None
+    purchase = _completed_purchase(db, current_user.id, seller.id)
+    if purchase is None:
+        return ReviewEligibilityResponse(can_review=False, already_reviewed=already_reviewed)
+
+    card = db.get(Card, purchase.card_id)
+    return ReviewEligibilityResponse(
+        can_review=not already_reviewed,
+        already_reviewed=already_reviewed,
+        listing_id=purchase.id,
+        listing_card_name=card.name if card else None,
+    )
+
+
 @router.post("/seller/{username}", response_model=ReviewResponse, status_code=status.HTTP_201_CREATED)
 async def create_seller_review(
     username: str,
@@ -69,20 +129,40 @@ async def create_seller_review(
     if seller.id == current_user.id:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="You cannot review yourself")
 
-    existing = db.scalar(
-        select(SellerReview.id).where(
-            SellerReview.reviewer_id == current_user.id,
-            SellerReview.seller_id == seller.id,
+    purchase = _completed_purchase(db, current_user.id, seller.id)
+    if purchase is None:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="You can only review a seller after completing a sale with them",
         )
-    )
-    if existing is not None:
+
+    if _existing_review_id(db, current_user.id, seller.id) is not None:
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="You already reviewed this seller")
+
+    # Defaults to the sale that earned the review; a client can name another one,
+    # but only among its own completed sales with this seller.
+    listing_id = purchase.id
+    if payload.listing_id is not None and payload.listing_id != purchase.id:
+        chosen = db.scalar(
+            select(Listing.id).where(
+                Listing.id == payload.listing_id,
+                Listing.seller_id == seller.id,
+                Listing.buyer_id == current_user.id,
+                Listing.status == ListingStatus.SOLD,
+            )
+        )
+        if chosen is None:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="That listing is not a sale you completed with this seller",
+            )
+        listing_id = chosen
 
     comment = payload.comment.strip() if payload.comment else None
     review = SellerReview(
         reviewer_id=current_user.id,
         seller_id=seller.id,
-        listing_id=payload.listing_id,
+        listing_id=listing_id,
         rating=payload.rating,
         comment=comment,
     )

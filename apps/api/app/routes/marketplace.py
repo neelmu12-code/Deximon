@@ -8,9 +8,7 @@ from sqlalchemy.orm import Session, selectinload
 from app.db.session import get_db
 from app.dependencies.auth import get_current_user
 from app.models.card import Card
-from app.models.chat import Conversation
 from app.models.listing import Listing, ListingStatus
-from app.models.notification import NotificationType
 from app.models.user import User
 from app.schemas.binder import HoloType
 from app.schemas.marketplace import (
@@ -20,27 +18,16 @@ from app.schemas.marketplace import (
     ListingSellerResponse,
     ListingUpdate,
 )
-from app.services.notifications import actor_meta, create_notification
+from app.services.listings import (
+    ensure_buyer_of_listing,
+    ensure_valid_transition,
+    notify_listing_status_change,
+)
 from app.services.reviews import seller_rating, seller_ratings
 
 router = APIRouter(prefix="/market/listings", tags=["marketplace"])
 DbSession = Annotated[Session, Depends(get_db)]
 CurrentUser = Annotated[User, Depends(get_current_user)]
-
-_ALLOWED_STATUS_TRANSITIONS: dict[ListingStatus, set[ListingStatus]] = {
-    ListingStatus.AVAILABLE: {
-        ListingStatus.ON_HOLD,
-        ListingStatus.SOLD,
-        ListingStatus.CANCELLED,
-    },
-    ListingStatus.ON_HOLD: {
-        ListingStatus.AVAILABLE,
-        ListingStatus.SOLD,
-        ListingStatus.CANCELLED,
-    },
-    ListingStatus.SOLD: set(),
-    ListingStatus.CANCELLED: set(),
-}
 
 
 def _holo_type(card: Card) -> HoloType:
@@ -78,6 +65,7 @@ def _listing_response(
         id=listing.id,
         card_id=listing.card_id,
         seller_id=listing.seller_id,
+        buyer_id=listing.buyer_id,
         asking_price=_price_to_float(listing.asking_price),
         notes=listing.notes,
         status=listing.status,
@@ -130,7 +118,9 @@ def list_listings(
     stmt = select(Listing).join(Card, Listing.card_id == Card.id)
 
     if status_filter is None:
-        stmt = stmt.where(Listing.status != ListingStatus.CANCELLED)
+        # The public marketplace shows only what's for sale. Pending (on_hold),
+        # sold, and cancelled listings are hidden unless asked for explicitly.
+        stmt = stmt.where(Listing.status == ListingStatus.AVAILABLE)
     else:
         stmt = stmt.where(Listing.status == status_filter)
 
@@ -212,12 +202,25 @@ async def update_listing(
     old_status = listing.status
     if "status" in updates and updates["status"] is not None:
         new_status = updates["status"]
-        if new_status != listing.status and new_status not in _ALLOWED_STATUS_TRANSITIONS[listing.status]:
+        ensure_valid_transition(listing.status, new_status)
+        listing.status = new_status
+
+    buyer_id = updates.get("buyer_id")
+    if buyer_id is not None:
+        # A buyer only means anything on a listing that ends this request sold.
+        if listing.status != ListingStatus.SOLD:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
-                detail="Invalid listing status transition",
+                detail="A buyer can only be recorded when marking a listing sold",
             )
-        listing.status = new_status
+        # Re-pointing a sale would silently strip the first buyer's review rights.
+        if listing.buyer_id is not None and listing.buyer_id != buyer_id:
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail="This sale already has a recorded buyer",
+            )
+        ensure_buyer_of_listing(db, listing, buyer_id)
+        listing.buyer_id = buyer_id
 
     if "asking_price" in updates:
         asking_price = updates["asking_price"]
@@ -230,21 +233,6 @@ async def update_listing(
     db.refresh(listing)
 
     if "status" in updates and updates["status"] is not None and listing.status != old_status:
-        card = db.get(Card, listing.card_id)
-        card_name = card.name if card else "a listing"
-        conversations = db.scalars(select(Conversation).where(Conversation.listing_id == listing.id))
-        for conversation in conversations:
-            await create_notification(
-                db,
-                user_id=conversation.requester_id,
-                type=NotificationType.listing_status,
-                title=current_user.username,
-                body=f"changed {card_name} to {listing.status.value.replace('_', ' ')}",
-                meta={
-                    "listing_id": str(listing.id),
-                    "status": listing.status.value,
-                    **actor_meta(current_user),
-                },
-            )
+        await notify_listing_status_change(db, listing, current_user)
 
     return _listing_response(db, listing)

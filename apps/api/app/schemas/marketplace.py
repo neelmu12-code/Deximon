@@ -18,6 +18,9 @@ class ListingUpdate(BaseModel):
     asking_price: Decimal | None = Field(default=None, ge=0, max_digits=10, decimal_places=2)
     notes: str | None = Field(default=None, max_length=500)
     status: ListingStatus | None = None
+    # Only accepted alongside status=sold, for a user with a conversation on the
+    # listing. Setting it is what earns that buyer the right to review the seller.
+    buyer_id: UUID | None = None
 
 
 class ListingCardResponse(BaseModel):
@@ -47,6 +50,7 @@ class ListingResponse(BaseModel):
     id: UUID
     card_id: UUID
     seller_id: UUID
+    buyer_id: UUID | None
     asking_price: float | None
     notes: str | None
     status: ListingStatus

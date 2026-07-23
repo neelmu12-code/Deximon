@@ -18,6 +18,15 @@ class ReviewResponse(BaseModel):
     created_at: datetime
 
 
+class ReviewEligibilityResponse(BaseModel):
+    """Whether the caller may review this seller, and what sale earns it."""
+
+    can_review: bool
+    already_reviewed: bool
+    listing_id: UUID | None = None
+    listing_card_name: str | None = None
+
+
 class ReviewListResponse(BaseModel):
     reviews: list[ReviewResponse]
     avg_rating: float | None
