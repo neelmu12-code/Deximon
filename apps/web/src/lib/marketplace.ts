@@ -60,8 +60,11 @@ export type Conversation = {
   requester_username: string;
   seller_username: string;
   listing_card_name: string;
+  listing_price: number | null;
+  listing_image_url: string | null;
   listing_status: ListingStatus;
   last_message: Message | null;
+  unread_count: number;
   created_at: string;
 };
 

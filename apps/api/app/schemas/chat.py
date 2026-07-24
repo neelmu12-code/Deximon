@@ -31,8 +31,11 @@ class ConversationResponse(BaseModel):
     requester_username: str
     seller_username: str
     listing_card_name: str
+    listing_price: float | None = None
+    listing_image_url: str | None = None
     listing_status: ListingStatus
     last_message: MessageResponse | None
+    unread_count: int = 0
     created_at: datetime
 
 
