@@ -11,9 +11,11 @@ from app.models import (
     BinderPage,
     BinderSlot,
     Card,
+    Conversation,
     Listing,
     ListingStatus,
     Profile,
+    SellerReview,
     User,
 )
 
@@ -132,6 +134,32 @@ def seed() -> None:
                     status=ListingStatus.AVAILABLE,
                 )
             )
+
+        # Make bob's sold listing a real sale to alice (chat + recorded buyer), so
+        # the demo has someone who is actually allowed to review a seller.
+        sold_listing = (
+            db.query(Listing)
+            .filter(Listing.seller_id == bob.id, Listing.status == ListingStatus.SOLD)
+            .first()
+        )
+        if sold_listing is not None and sold_listing.buyer_id is None:
+            sold_listing.buyer_id = alice.id
+            db.add(Conversation(listing_id=sold_listing.id, requester_id=alice.id))
+            already_reviewed = (
+                db.query(SellerReview)
+                .filter(SellerReview.reviewer_id == alice.id, SellerReview.seller_id == bob.id)
+                .one_or_none()
+            )
+            if already_reviewed is None:
+                db.add(
+                    SellerReview(
+                        reviewer_id=alice.id,
+                        seller_id=bob.id,
+                        listing_id=sold_listing.id,
+                        rating=5,
+                        comment="Smooth trade, shipped fast. Would buy again!",
+                    )
+                )
 
         db.commit()
         print(f"seed: users={db.query(User).count()} cards={db.query(Card).count()} "

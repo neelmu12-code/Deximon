@@ -11,3 +11,11 @@ export type ReviewList = {
   avg_rating: number | null;
   review_count: number;
 };
+
+/** Whether the signed-in user may review a seller, so the UI doesn't offer a form that 403s. */
+export type ReviewEligibility = {
+  can_review: boolean;
+  already_reviewed: boolean;
+  listing_id: string | null;
+  listing_card_name: string | null;
+};

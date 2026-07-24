@@ -1,7 +1,12 @@
 "use client";
 
 import Link from "next/link";
-import { notificationActorUsername, type Notification } from "@/lib/notifications";
+import {
+  notificationActionLabel,
+  notificationActorUsername,
+  notificationHref,
+  type Notification,
+} from "@/lib/notifications";
 
 export function NotificationText({
   notification,
@@ -11,6 +16,8 @@ export function NotificationText({
   className?: string;
 }) {
   const username = notificationActorUsername(notification);
+  const href = notificationHref(notification);
+  const actionLabel = notificationActionLabel(notification);
 
   return (
     <div className={className}>
@@ -22,6 +29,13 @@ export function NotificationText({
         </>
       ) : null}
       <span className="text-ink2">{notification.body}</span>
+      {href && actionLabel && (
+        <div className="mt-1">
+          <Link href={href} className="text-[12px] text-dx-blue hover:underline">
+            {actionLabel} →
+          </Link>
+        </div>
+      )}
     </div>
   );
 }

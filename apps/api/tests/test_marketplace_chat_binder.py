@@ -63,6 +63,30 @@ def create_listing(
     return response.json()
 
 
+def complete_sale(
+    client: TestClient,
+    seller_headers: dict[str, str],
+    buyer_headers: dict[str, str],
+    card_name: str = "Charizard",
+) -> dict[str, object]:
+    """Drive a listing to sold from the buyer's chat, which records them as buyer."""
+    card = create_card(client, seller_headers, card_name)
+    listing = create_listing(client, seller_headers, str(card["id"]))
+    conversation = client.post(
+        "/conversations",
+        headers=buyer_headers,
+        json={"listing_id": listing["id"]},
+    )
+    assert conversation.status_code == 201
+    sold = client.patch(
+        f"/conversations/{conversation.json()['id']}/listing-status",
+        headers=seller_headers,
+        json={"status": "sold"},
+    )
+    assert sold.status_code == 200
+    return listing
+
+
 def test_binder_card_create_assign_and_move_requires_auth(client: TestClient) -> None:
     assert client.get("/binder/me").status_code == 401
     seller = register_user(client, "seller@example.com", "seller")
@@ -187,6 +211,206 @@ def test_listing_scoped_conversation_and_messages(client: TestClient) -> None:
 
     outsider_view = client.get(f"/conversations/{conversation_id}", headers=outsider_headers)
     assert outsider_view.status_code == 403
+
+
+def test_seller_marks_listing_sold_from_chat_and_records_buyer(client: TestClient) -> None:
+    seller = register_user(client, "seller@example.com", "seller")
+    buyer = register_user(client, "buyer@example.com", "buyer")
+    seller_headers = auth_headers(seller)
+    buyer_headers = auth_headers(buyer)
+    card = create_card(client, seller_headers)
+    listing = create_listing(client, seller_headers, str(card["id"]))
+    conversation = client.post(
+        "/conversations", headers=buyer_headers, json={"listing_id": listing["id"]}
+    )
+    conversation_id = conversation.json()["id"]
+
+    buyer_attempt = client.patch(
+        f"/conversations/{conversation_id}/listing-status",
+        headers=buyer_headers,
+        json={"status": "sold"},
+    )
+    assert buyer_attempt.status_code == 403
+
+    # Pending is not a sale, so it must not record a buyer.
+    pending = client.patch(
+        f"/conversations/{conversation_id}/listing-status",
+        headers=seller_headers,
+        json={"status": "on_hold"},
+    )
+    assert pending.status_code == 200
+    assert pending.json()["listing_status"] == "on_hold"
+    assert pending.json()["listing_buyer_id"] is None
+
+    reopened = client.patch(
+        f"/conversations/{conversation_id}/listing-status",
+        headers=seller_headers,
+        json={"status": "available"},
+    )
+    assert reopened.status_code == 200
+    assert reopened.json()["listing_status"] == "available"
+
+    sold = client.patch(
+        f"/conversations/{conversation_id}/listing-status",
+        headers=seller_headers,
+        json={"status": "sold"},
+    )
+    assert sold.status_code == 200
+    assert sold.json()["listing_status"] == "sold"
+    assert sold.json()["listing_buyer_id"] == buyer["user"]["id"]
+
+
+def test_marketplace_hides_pending_and_sold_listings(client: TestClient) -> None:
+    seller = register_user(client, "seller@example.com", "seller")
+    buyer = register_user(client, "buyer@example.com", "buyer")
+    seller_headers = auth_headers(seller)
+    buyer_headers = auth_headers(buyer)
+    card = create_card(client, seller_headers)
+    listing = create_listing(client, seller_headers, str(card["id"]))
+    conversation = client.post(
+        "/conversations", headers=buyer_headers, json={"listing_id": listing["id"]}
+    )
+    conversation_id = conversation.json()["id"]
+
+    assert [row["id"] for row in client.get("/market/listings").json()] == [listing["id"]]
+
+    client.patch(
+        f"/conversations/{conversation_id}/listing-status",
+        headers=seller_headers,
+        json={"status": "on_hold"},
+    )
+    # Hidden from the default view, still reachable with an explicit filter.
+    assert client.get("/market/listings").json() == []
+    assert [row["id"] for row in client.get("/market/listings?status=on_hold").json()] == [listing["id"]]
+
+    client.patch(
+        f"/conversations/{conversation_id}/listing-status",
+        headers=seller_headers,
+        json={"status": "available"},
+    )
+    assert [row["id"] for row in client.get("/market/listings").json()] == [listing["id"]]
+
+    client.patch(
+        f"/conversations/{conversation_id}/listing-status",
+        headers=seller_headers,
+        json={"status": "sold"},
+    )
+    assert client.get("/market/listings").json() == []
+
+
+def test_seller_marks_sold_with_chosen_buyer_from_the_listing(client: TestClient) -> None:
+    """The listing page route: mark sold and name which chatter bought it."""
+    seller = register_user(client, "seller@example.com", "seller")
+    buyer = register_user(client, "buyer@example.com", "buyer")
+    bystander = register_user(client, "bystander@example.com", "bystander")
+    seller_headers = auth_headers(seller)
+    card = create_card(client, seller_headers)
+    listing = create_listing(client, seller_headers, str(card["id"]))
+    for user in (buyer, bystander):
+        client.post("/conversations", headers=auth_headers(user), json={"listing_id": listing["id"]})
+
+    # This is what fills the seller's "who did you sell to?" picker.
+    interested = client.get(f"/conversations?listing_id={listing['id']}", headers=seller_headers)
+    assert interested.status_code == 200
+    assert {row["requester_username"] for row in interested.json()} == {"buyer", "bystander"}
+
+    sold = client.patch(
+        f"/market/listings/{listing['id']}",
+        headers=seller_headers,
+        json={"status": "sold", "buyer_id": buyer["user"]["id"]},
+    )
+    assert sold.status_code == 200
+    assert sold.json()["status"] == "sold"
+    assert sold.json()["buyer_id"] == buyer["user"]["id"]
+
+
+def test_recording_a_buyer_is_validated(client: TestClient) -> None:
+    seller = register_user(client, "seller@example.com", "seller")
+    buyer = register_user(client, "buyer@example.com", "buyer")
+    stranger = register_user(client, "stranger@example.com", "stranger")
+    seller_headers = auth_headers(seller)
+    card = create_card(client, seller_headers)
+    listing = create_listing(client, seller_headers, str(card["id"]))
+    client.post("/conversations", headers=auth_headers(buyer), json={"listing_id": listing["id"]})
+
+    not_sold = client.patch(
+        f"/market/listings/{listing['id']}",
+        headers=seller_headers,
+        json={"status": "on_hold", "buyer_id": buyer["user"]["id"]},
+    )
+    assert not_sold.status_code == 400
+
+    never_chatted = client.patch(
+        f"/market/listings/{listing['id']}",
+        headers=seller_headers,
+        json={"status": "sold", "buyer_id": stranger["user"]["id"]},
+    )
+    assert never_chatted.status_code == 400
+
+    self_buy = client.patch(
+        f"/market/listings/{listing['id']}",
+        headers=seller_headers,
+        json={"status": "sold", "buyer_id": seller["user"]["id"]},
+    )
+    assert self_buy.status_code == 400
+
+    # Each rejection rolls back the whole PATCH, status included.
+    unchanged = client.get(f"/market/listings/{listing['id']}").json()
+    assert unchanged["status"] == "available"
+    assert unchanged["buyer_id"] is None
+
+
+def test_recorded_buyer_cannot_be_swapped_afterwards(client: TestClient) -> None:
+    """Re-pointing a sale would quietly strip the first buyer's review rights."""
+    seller = register_user(client, "seller@example.com", "seller")
+    buyer = register_user(client, "buyer@example.com", "buyer")
+    other = register_user(client, "other@example.com", "other")
+    seller_headers = auth_headers(seller)
+    card = create_card(client, seller_headers)
+    listing = create_listing(client, seller_headers, str(card["id"]))
+    for user in (buyer, other):
+        client.post("/conversations", headers=auth_headers(user), json={"listing_id": listing["id"]})
+
+    first = client.patch(
+        f"/market/listings/{listing['id']}",
+        headers=seller_headers,
+        json={"status": "sold", "buyer_id": buyer["user"]["id"]},
+    )
+    assert first.status_code == 200
+
+    swap = client.patch(
+        f"/market/listings/{listing['id']}",
+        headers=seller_headers,
+        json={"status": "sold", "buyer_id": other["user"]["id"]},
+    )
+    assert swap.status_code == 409
+    assert client.get(f"/market/listings/{listing['id']}").json()["buyer_id"] == buyer["user"]["id"]
+
+
+def test_seller_can_edit_price_and_notes(client: TestClient) -> None:
+    seller = register_user(client, "seller@example.com", "seller")
+    outsider = register_user(client, "outsider@example.com", "outsider")
+    seller_headers = auth_headers(seller)
+    card = create_card(client, seller_headers)
+    listing = create_listing(client, seller_headers, str(card["id"]))
+
+    updated = client.patch(
+        f"/market/listings/{listing['id']}",
+        headers=seller_headers,
+        json={"asking_price": "199.99", "notes": "Price drop, near mint."},
+    )
+    assert updated.status_code == 200
+    assert updated.json()["asking_price"] == 199.99
+    assert updated.json()["notes"] == "Price drop, near mint."
+
+    assert (
+        client.patch(
+            f"/market/listings/{listing['id']}",
+            headers=auth_headers(outsider),
+            json={"asking_price": "1.00"},
+        ).status_code
+        == 403
+    )
 
 
 def test_marketplace_filters_by_set_rarity_and_type(client: TestClient) -> None:

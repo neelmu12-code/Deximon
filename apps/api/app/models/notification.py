@@ -14,6 +14,8 @@ class NotificationType(str, enum.Enum):
     message = "message"
     listing_status = "listing_status"
     review = "review"
+    # Sent to the buyer a listing was sold to, inviting them to review the seller.
+    review_prompt = "review_prompt"
 
 
 class Notification(Base):

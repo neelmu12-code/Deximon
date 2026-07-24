@@ -1,10 +1,17 @@
 from datetime import datetime, timezone
 from typing import Annotated
 from uuid import UUID
-
 from collections import defaultdict
 
-from fastapi import APIRouter, Depends, HTTPException, WebSocket, WebSocketDisconnect, status
+from fastapi import (
+    APIRouter,
+    Depends,
+    HTTPException,
+    Query,
+    WebSocket,
+    WebSocketDisconnect,
+    status,
+)
 from sqlalchemy import func, or_, select
 from sqlalchemy.orm import Session
 
@@ -21,9 +28,11 @@ from app.schemas.chat import (
     ConversationCreate,
     ConversationDetailResponse,
     ConversationResponse,
+    ListingStatusUpdate,
     MessageCreate,
     MessageResponse,
 )
+from app.services.listings import ensure_valid_transition, notify_listing_status_change
 from app.services.notifications import actor_meta, create_notification
 
 router = APIRouter(prefix="/conversations", tags=["chat"])
@@ -52,7 +61,7 @@ class ConversationConnectionManager:
         for socket in list(self._connections.get(conversation_id, set())):
             try:
                 await socket.send_json(payload)
-            except RuntimeError:
+            except Exception:
                 stale.append(socket)
         for socket in stale:
             self.disconnect(conversation_id, socket)
@@ -72,6 +81,17 @@ def _message_response(db: Session, message: Message) -> MessageResponse:
         sender_username=sender.username,
         body=message.body,
         created_at=message.created_at,
+    )
+
+
+async def _broadcast_message(db: Session, conversation_id: UUID, message: Message) -> None:
+    await manager.broadcast(
+        conversation_id,
+        {
+            "type": "message",
+            "conversation_id": str(conversation_id),
+            "message": _message_response(db, message).model_dump(mode="json"),
+        },
     )
 
 
@@ -229,6 +249,7 @@ def _conversation_response(
         "listing_price": listing.asking_price,
         "listing_image_url": card.image_url,
         "listing_status": listing.status,
+        "listing_buyer_id": listing.buyer_id,
         "last_message": last_message,
         "unread_count": unread_count,
         "created_at": conversation.created_at,
@@ -239,8 +260,16 @@ def _conversation_response(
 
 
 @router.get("", response_model=list[ConversationResponse])
-def list_conversations(current_user: CurrentUser, db: DbSession) -> list[ConversationResponse]:
-    conversations = db.scalars(
+def list_conversations(
+    current_user: CurrentUser,
+    db: DbSession,
+    listing_id: Annotated[UUID | None, Query()] = None,
+) -> list[ConversationResponse]:
+    """The caller's conversations, optionally narrowed to one listing.
+
+    Sellers use the filter to list who enquired when picking who they sold to.
+    """
+    stmt = (
         select(Conversation)
         .join(Listing, Conversation.listing_id == Listing.id)
         .where(
@@ -249,8 +278,10 @@ def list_conversations(current_user: CurrentUser, db: DbSession) -> list[Convers
                 Listing.seller_id == current_user.id,
             )
         )
-        .order_by(Conversation.created_at.desc())
     )
+    if listing_id is not None:
+        stmt = stmt.where(Conversation.listing_id == listing_id)
+    conversations = db.scalars(stmt.order_by(Conversation.created_at.desc()))
     return [
         response
         for conversation in conversations
@@ -348,6 +379,44 @@ def mark_conversation_read(
     return {"ok": True}
 
 
+@router.patch("/{conversation_id}/listing-status", response_model=ConversationDetailResponse)
+async def update_conversation_listing_status(
+    conversation_id: UUID,
+    payload: ListingStatusUpdate,
+    current_user: CurrentUser,
+    db: DbSession,
+) -> ConversationDetailResponse:
+    """Seller-only control from inside a chat.
+
+    Marking the listing sold here records the other participant as the buyer, so
+    only they can review the seller afterwards. Pending/available toggle the
+    listing's visibility in the marketplace without closing the sale.
+    """
+    conversation, listing, _card, _requester, _seller = _conversation_context(db, conversation_id)
+    if listing.seller_id != current_user.id:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Only the seller can update the listing",
+        )
+
+    new_status = payload.status
+    ensure_valid_transition(listing.status, new_status)
+    old_status = listing.status
+    listing.status = new_status
+    if new_status == ListingStatus.SOLD:
+        listing.buyer_id = conversation.requester_id
+    db.commit()
+    db.refresh(listing)
+
+    if listing.status != old_status:
+        await notify_listing_status_change(db, listing, current_user)
+
+    response = _conversation_response(db, conversation, include_messages=True)
+    if not isinstance(response, ConversationDetailResponse):
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Invalid response")
+    return response
+
+
 @router.get("/{conversation_id}/messages", response_model=list[MessageResponse])
 def list_messages(
     conversation_id: UUID,
@@ -390,6 +459,7 @@ async def send_message(
     db.commit()
     db.refresh(message)
     await _notify_message(db, conversation, listing, current_user)
+    await _broadcast_message(db, conversation.id, message)
     return _message_response(db, message)
 
 
@@ -432,13 +502,7 @@ async def conversation_websocket(websocket: WebSocket, conversation_id: UUID) ->
             db.commit()
             db.refresh(message)
             await _notify_message(db, conversation, listing, user)
-            await manager.broadcast(
-                conversation_id,
-                {
-                    "type": "message",
-                    "message": _message_response(db, message).model_dump(mode="json"),
-                },
-            )
+            await _broadcast_message(db, conversation_id, message)
     except HTTPException:
         await websocket.close(code=status.WS_1008_POLICY_VIOLATION)
     except WebSocketDisconnect:

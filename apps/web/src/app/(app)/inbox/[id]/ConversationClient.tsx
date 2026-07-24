@@ -95,7 +95,9 @@ export function ConversationClient({ id }: { id: string }) {
         cookieValue("token") ||
         cookieValue("auth_token");
 
-      if (token) url.searchParams.set("token", token);
+      if (token) {
+        url.searchParams.set("token", token);
+      }
 
       const socket = new WebSocket(url.toString());
       socketRef.current = socket;
