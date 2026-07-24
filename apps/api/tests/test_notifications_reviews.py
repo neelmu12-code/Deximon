@@ -440,7 +440,7 @@ def test_review_accepts_half_star_rating(client: TestClient) -> None:
     assert "4.5-star" in notifications.json()["notifications"][0]["body"]
 
 
-def test_review_rejects_comment_over_word_limit(client: TestClient) -> None:
+def test_review_rejects_comment_over_char_limit(client: TestClient) -> None:
     seller = register_user(client, "seller@example.com", "seller")
     buyer = register_user(client, "buyer@example.com", "buyer")
     seller_headers = auth_headers(seller)
@@ -450,7 +450,7 @@ def test_review_rejects_comment_over_word_limit(client: TestClient) -> None:
     refused = client.post(
         "/reviews/seller/seller",
         headers=buyer_headers,
-        json={"rating": 5, "comment": " ".join(["word"] * 101)},
+        json={"rating": 5, "comment": "a" * 251},
     )
     assert refused.status_code == 422
 

@@ -3,13 +3,13 @@ from uuid import UUID
 
 from pydantic import BaseModel, Field, field_validator
 
-MAX_COMMENT_WORDS = 100
+MAX_COMMENT_CHARS = 250
 
 
 class ReviewCreate(BaseModel):
     # Half stars are allowed: 0.5, 1.0, 1.5, ... 5.0.
     rating: float = Field(ge=0.5, le=5)
-    comment: str | None = Field(default=None, max_length=1000)
+    comment: str | None = Field(default=None, max_length=MAX_COMMENT_CHARS)
     listing_id: UUID | None = None
 
     @field_validator("rating")
@@ -17,13 +17,6 @@ class ReviewCreate(BaseModel):
     def rating_in_half_steps(cls, value: float) -> float:
         if (value * 2) % 1 != 0:
             raise ValueError("rating must be a whole or half star (e.g. 4 or 4.5)")
-        return value
-
-    @field_validator("comment")
-    @classmethod
-    def comment_within_word_limit(cls, value: str | None) -> str | None:
-        if value and len(value.split()) > MAX_COMMENT_WORDS:
-            raise ValueError(f"comment must be {MAX_COMMENT_WORDS} words or fewer")
         return value
 
 
