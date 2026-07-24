@@ -96,8 +96,13 @@ export function ListingDetailClient({ id }: { id: string }) {
   const [listing, setListing] = useState<Listing | null>(null);
   const [others, setOthers] = useState<Listing[]>([]);
   const [selectedStatus, setSelectedStatus] = useState<ListingStatus>("available");
+  const [interested, setInterested] = useState<Conversation[]>([]);
+  const [buyerId, setBuyerId] = useState("");
+  const [price, setPrice] = useState("");
+  const [notes, setNotes] = useState("");
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [savingDetails, setSavingDetails] = useState(false);
   const [openingChat, setOpeningChat] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [message, setMessage] = useState<string | null>(null);
@@ -110,6 +115,9 @@ export function ListingDetailClient({ id }: { id: string }) {
         if (data) {
           setListing(data);
           setSelectedStatus(data.status);
+          setBuyerId(data.buyer_id ?? "");
+          setPrice(data.asking_price == null ? "" : String(data.asking_price));
+          setNotes(data.notes ?? "");
         }
         setError(null);
       })
@@ -138,6 +146,18 @@ export function ListingDetailClient({ id }: { id: string }) {
 
   const isSeller = Boolean(user && listing && user.id === listing.seller_id);
 
+  // Whoever chatted about the card is who it can have been sold to.
+  useEffect(() => {
+    if (!isSeller || !listing) return;
+    const controller = new AbortController();
+    fetchAPI<Conversation[]>(`/conversations?listing_id=${listing.id}`, {
+      signal: controller.signal,
+    })
+      .then((data) => setInterested(data ?? []))
+      .catch(() => setInterested([]));
+    return () => controller.abort();
+  }, [isSeller, listing]);
+
   async function openChat() {
     if (!listing) return;
     setOpeningChat(true);
@@ -162,17 +182,51 @@ export function ListingDetailClient({ id }: { id: string }) {
     setError(null);
     setMessage(null);
     try {
+      // Naming the buyer is what lets them review the sale, and the API only
+      // takes it when the listing is being closed as sold.
+      const body: { status: ListingStatus; buyer_id?: string } = { status: selectedStatus };
+      if (selectedStatus === "sold" && buyerId) body.buyer_id = buyerId;
+
       const updated = await fetchAPI<Listing>(`/market/listings/${listing.id}`, {
         method: "PATCH",
-        body: { status: selectedStatus },
+        body,
       });
       if (!updated) throw new Error("Listing update did not return a listing.");
       setListing(updated);
-      setMessage("Listing status updated.");
+      setMessage(
+        updated.status === "sold" && updated.buyer_id
+          ? "Sale recorded — the buyer has been invited to review you."
+          : "Listing status updated.",
+      );
     } catch (statusError) {
       setError(errorMessage(statusError));
     } finally {
       setSaving(false);
+    }
+  }
+
+  async function saveDetails() {
+    if (!listing) return;
+    setSavingDetails(true);
+    setError(null);
+    setMessage(null);
+    try {
+      const trimmedPrice = price.trim();
+      const trimmedNotes = notes.trim();
+      const updated = await fetchAPI<Listing>(`/market/listings/${listing.id}`, {
+        method: "PATCH",
+        body: {
+          asking_price: trimmedPrice === "" ? null : trimmedPrice,
+          notes: trimmedNotes === "" ? null : trimmedNotes,
+        },
+      });
+      if (!updated) throw new Error("Listing update did not return a listing.");
+      setListing(updated);
+      setMessage("Listing details updated.");
+    } catch (detailsError) {
+      setError(errorMessage(detailsError));
+    } finally {
+      setSavingDetails(false);
     }
   }
 
@@ -198,6 +252,18 @@ export function ListingDetailClient({ id }: { id: string }) {
 
   const card = listing.card;
   const reviews = listing.seller.review_count ?? 0;
+  const hasRecordedBuyer = listing.buyer_id != null;
+  const recordedBuyerName =
+    interested.find((conversation) => conversation.requester_id === listing.buyer_id)
+      ?.requester_username ?? null;
+  // A sold listing can still have its buyer filled in later, so an unchanged
+  // status alone isn't a reason to disable the button.
+  const canApplyStatus =
+    selectedStatus !== listing.status ||
+    (selectedStatus === "sold" && !hasRecordedBuyer && Boolean(buyerId));
+  const detailsChanged =
+    price.trim() !== (listing.asking_price == null ? "" : String(listing.asking_price)) ||
+    notes.trim() !== (listing.notes ?? "");
 
   return (
     <div className="mx-auto max-w-[1280px] px-6 py-8">
@@ -267,26 +333,77 @@ export function ListingDetailClient({ id }: { id: string }) {
               <div className="flex flex-col items-end gap-2">
                 <StatusPill status={listing.status} />
                 {isSeller ? (
-                  <div className="flex items-center gap-2">
-                    <select
-                      value={selectedStatus}
-                      onChange={(event) => setSelectedStatus(event.target.value as ListingStatus)}
-                      className="h-9 rounded-md border border-hair bg-surface2 px-2 text-[13px] text-ink outline-none focus:border-ink3"
-                    >
-                      {STATUS_OPTIONS.map((option) => (
-                        <option key={option} value={option}>
-                          {listingStatusLabel(option)}
-                        </option>
-                      ))}
-                    </select>
-                    <button
-                      type="button"
-                      onClick={updateStatus}
-                      disabled={saving || selectedStatus === listing.status}
-                      className="inline-flex h-9 items-center rounded-md bg-dx-red px-4 text-[13px] font-medium text-white transition-colors hover:bg-dx-red-hover disabled:cursor-not-allowed disabled:opacity-50"
-                    >
-                      {saving ? "Saving…" : "Update"}
-                    </button>
+                  <div className="flex flex-col items-end gap-2">
+                    <div className="flex items-center gap-2">
+                      <select
+                        value={selectedStatus}
+                        onChange={(event) => setSelectedStatus(event.target.value as ListingStatus)}
+                        className="h-9 rounded-md border border-hair bg-surface2 px-2 text-[13px] text-ink outline-none focus:border-ink3"
+                      >
+                        {STATUS_OPTIONS.map((option) => (
+                          <option key={option} value={option}>
+                            {listingStatusLabel(option)}
+                          </option>
+                        ))}
+                      </select>
+                      <button
+                        type="button"
+                        onClick={updateStatus}
+                        disabled={saving || !canApplyStatus}
+                        className="inline-flex h-9 items-center rounded-md bg-dx-red px-4 text-[13px] font-medium text-white transition-colors hover:bg-dx-red-hover disabled:cursor-not-allowed disabled:opacity-50"
+                      >
+                        {saving ? "Saving…" : "Update"}
+                      </button>
+                    </div>
+
+                    {hasRecordedBuyer ? (
+                      <div className="text-[12px] text-ink3">
+                        {recordedBuyerName ? (
+                          <>
+                            Sold to{" "}
+                            <Link
+                              href={`/u/${recordedBuyerName}`}
+                              className="text-dx-blue hover:underline"
+                            >
+                              @{recordedBuyerName}
+                            </Link>
+                          </>
+                        ) : (
+                          "Buyer recorded"
+                        )}
+                      </div>
+                    ) : (
+                      selectedStatus === "sold" &&
+                      (interested.length > 0 ? (
+                        <div className="flex items-center gap-2">
+                          <label htmlFor="sold-to" className="text-[12px] text-ink3">
+                            Sold to
+                          </label>
+                          <select
+                            id="sold-to"
+                            value={buyerId}
+                            onChange={(event) => setBuyerId(event.target.value)}
+                            className="h-9 rounded-md border border-hair bg-surface2 px-2 text-[13px] text-ink outline-none focus:border-ink3"
+                          >
+                            <option value="">Choose a buyer…</option>
+                            {interested.map((conversation) => (
+                              <option key={conversation.id} value={conversation.requester_id}>
+                                @{conversation.requester_username}
+                              </option>
+                            ))}
+                          </select>
+                        </div>
+                      ) : (
+                        <p className="max-w-[260px] text-right text-[11px] text-ink3">
+                          Nobody has messaged you about this card, so there is no buyer to record.
+                        </p>
+                      ))
+                    )}
+                    {selectedStatus === "sold" && !hasRecordedBuyer && !buyerId && interested.length > 0 && (
+                      <p className="max-w-[260px] text-right text-[11px] text-ink3">
+                        Naming the buyer lets them leave you a review.
+                      </p>
+                    )}
                   </div>
                 ) : (
                   <button
@@ -319,6 +436,53 @@ export function ListingDetailClient({ id }: { id: string }) {
               </div>
             </div>
           </div>
+
+          {/* Seller-only: price and notes */}
+          {isSeller && (
+            <div className="rounded-xl border border-hair bg-surface p-5">
+              <div className="mb-3 text-[11px] uppercase tracking-[0.22em] text-ink3">
+                Edit listing
+              </div>
+              <div className="grid grid-cols-1 gap-3 sm:grid-cols-[160px_1fr]">
+                <label className="text-[12px] text-ink2">
+                  Asking price
+                  <input
+                    type="number"
+                    min="0"
+                    step="0.01"
+                    value={price}
+                    onChange={(event) => setPrice(event.target.value)}
+                    placeholder="Trade offer"
+                    className="mt-1 h-9 w-full rounded-md border border-hair bg-surface2 px-2 text-[13px] text-ink outline-none focus:border-ink3"
+                  />
+                </label>
+                <label className="text-[12px] text-ink2">
+                  Notes
+                  <input
+                    type="text"
+                    maxLength={500}
+                    value={notes}
+                    onChange={(event) => setNotes(event.target.value)}
+                    placeholder="Condition details, shipping, trades considered…"
+                    className="mt-1 h-9 w-full rounded-md border border-hair bg-surface2 px-2 text-[13px] text-ink outline-none focus:border-ink3"
+                  />
+                </label>
+              </div>
+              <div className="mt-3 flex items-center justify-between gap-3">
+                <p className="text-[11px] text-ink3">
+                  Leave the price empty to list the card as a trade offer.
+                </p>
+                <button
+                  type="button"
+                  onClick={saveDetails}
+                  disabled={savingDetails || !detailsChanged}
+                  className="inline-flex h-9 items-center rounded-md bg-dx-red px-4 text-[13px] font-medium text-white transition-colors hover:bg-dx-red-hover disabled:cursor-not-allowed disabled:opacity-50"
+                >
+                  {savingDetails ? "Saving…" : "Save changes"}
+                </button>
+              </div>
+            </div>
+          )}
 
           {/* Seller */}
           <div className="rounded-xl border border-hair bg-surface p-5">

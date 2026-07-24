@@ -34,6 +34,7 @@ export type Listing = {
   id: string;
   card_id: string;
   seller_id: string;
+  buyer_id: string | null;
   asking_price: number | null;
   notes: string | null;
   status: ListingStatus;
@@ -61,6 +62,7 @@ export type Conversation = {
   seller_username: string;
   listing_card_name: string;
   listing_status: ListingStatus;
+  listing_buyer_id: string | null;
   last_message: Message | null;
   created_at: string;
 };

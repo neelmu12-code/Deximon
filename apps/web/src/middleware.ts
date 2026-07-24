@@ -23,6 +23,7 @@ export const config = {
     "/binder/:path*",
     "/inbox/:path*",
     "/notifications/:path*",
+    "/review/:path*",
     "/settings/:path*",
   ],
 };

@@ -1,6 +1,6 @@
 import { fetchAPI } from "@/lib/fetchAPI";
 
-export type NotificationType = "message" | "listing_status" | "review";
+export type NotificationType = "message" | "listing_status" | "review" | "review_prompt";
 
 export type Notification = {
   id: string;
@@ -37,6 +37,44 @@ export function notificationActorDisplayName(notification: Notification): string
 export function notificationActorAvatarUrl(notification: Notification): string | null {
   const fromMeta = notification.meta?.actor_avatar_url?.trim();
   return fromMeta || null;
+}
+
+/**
+ * Where a notification should take you when acted on, or null if nowhere useful.
+ * A message goes straight to its conversation rather than via the inbox list.
+ */
+export function notificationHref(notification: Notification): string | null {
+  const conversationId = notification.meta?.conversation_id;
+  const listingId = notification.meta?.listing_id;
+
+  switch (notification.type) {
+    case "review_prompt":
+      if (listingId) return `/review/${listingId}`;
+      // Prompts sent before the review page existed have no listing_id.
+      return conversationId ? `/inbox/${conversationId}?review=1` : null;
+    case "message":
+      return conversationId ? `/inbox/${conversationId}` : null;
+    case "listing_status":
+      return listingId ? `/market/${listingId}` : null;
+    case "review": {
+      const seller = notification.meta?.seller_username;
+      return seller ? `/u/${seller}` : null;
+    }
+  }
+}
+
+/** Call-to-action wording for notifications worth acting on, else null. */
+export function notificationActionLabel(notification: Notification): string | null {
+  switch (notification.type) {
+    case "review_prompt":
+      return "Leave a review";
+    case "message":
+      return "Open chat";
+    case "listing_status":
+      return "View listing";
+    case "review":
+      return null;
+  }
 }
 
 function timeAgo(iso: string): string {

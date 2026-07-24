@@ -10,6 +10,10 @@ class ConversationCreate(BaseModel):
     listing_id: UUID
 
 
+class ListingStatusUpdate(BaseModel):
+    status: ListingStatus
+
+
 class MessageCreate(BaseModel):
     body: str = Field(min_length=1, max_length=2000)
 
@@ -32,6 +36,7 @@ class ConversationResponse(BaseModel):
     seller_username: str
     listing_card_name: str
     listing_status: ListingStatus
+    listing_buyer_id: UUID | None
     last_message: MessageResponse | None
     created_at: datetime
 
