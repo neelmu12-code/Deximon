@@ -51,6 +51,9 @@ export function NotificationBell() {
       if (payload.type === "notification" && payload.notification) {
         setNotifications((current) => [payload.notification!, ...current].slice(0, 10));
         if (payload.unread_count != null) setUnread(payload.unread_count);
+        if (payload.notification.type === "message") {
+          window.dispatchEvent(new CustomEvent("inbox:refresh"));
+        }
       }
     };
 
@@ -100,24 +103,36 @@ export function NotificationBell() {
         type="button"
         aria-label="Notifications"
         onClick={toggleOpen}
-        className={`w-9 h-9 rounded-md inline-flex items-center justify-center transition-colors ${
-          open ? "bg-surface2 text-ink" : "text-ink2 hover:text-ink hover:bg-surface2"
+        className={`inline-flex h-9 w-9 items-center justify-center rounded-md transition-colors ${
+          open ? "bg-surface2 text-ink" : "text-ink2 hover:bg-surface2 hover:text-ink"
         }`}
       >
-        <svg viewBox="0 0 24 24" className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">
+        <svg
+          viewBox="0 0 24 24"
+          className="h-4 w-4"
+          fill="none"
+          stroke="currentColor"
+          strokeWidth="1.6"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+        >
           <path d="M6 16V11a6 6 0 1 1 12 0v5l1.5 2H4.5L6 16z" />
           <path d="M10 20a2 2 0 0 0 4 0" />
         </svg>
         {unread > 0 && (
-          <span className="absolute top-1.5 right-1.5 w-2 h-2 rounded-full bg-dx-red ring-2 ring-base" />
+          <span className="absolute right-1.5 top-1.5 h-2 w-2 rounded-full bg-dx-red ring-2 ring-base" />
         )}
       </button>
 
       {open && (
-        <div className="absolute right-0 top-full mt-2 w-[380px] bg-surface border border-hair rounded-xl shadow-2xl z-50">
-          <div className="flex items-center justify-between px-4 py-3 border-b border-hair">
-            <div className="font-semibold text-sm">Notifications</div>
-            <button type="button" onClick={markAllRead} className="text-[12px] text-dx-blue hover:underline">
+        <div className="absolute right-0 top-full z-50 mt-2 w-[380px] rounded-xl border border-hair bg-surface shadow-2xl">
+          <div className="flex items-center justify-between border-b border-hair px-4 py-3">
+            <div className="text-sm font-semibold">Notifications</div>
+            <button
+              type="button"
+              onClick={markAllRead}
+              className="text-[12px] text-dx-blue hover:underline"
+            >
               Mark all as read
             </button>
           </div>
@@ -129,39 +144,51 @@ export function NotificationBell() {
               notifications.map((n) => {
                 const actor = notificationActorUsername(n);
                 return (
-                <div
-                  key={n.id}
-                  className={`flex items-start gap-3 px-4 py-3 border-b border-hair/60 hover:bg-surface2 transition-colors ${
-                    !n.is_read ? "bg-surface/60" : ""
-                  }`}
-                >
-                  {actor ? (
-                    <UserAvatar
-                      username={actor}
-                      displayName={notificationActorDisplayName(n)}
-                      avatarUrl={notificationActorAvatarUrl(n)}
-                      size={32}
-                    />
-                  ) : (
-                    <div className="w-8 h-8 rounded-full bg-surface2 border border-hair inline-flex items-center justify-center text-ink2 shrink-0">
-                      <svg viewBox="0 0 24 24" className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">
-                        <path d="M6 16V11a6 6 0 1 1 12 0v5l1.5 2H4.5L6 16z" />
-                        <path d="M10 20a2 2 0 0 0 4 0" />
-                      </svg>
+                  <div
+                    key={n.id}
+                    className={`flex items-start gap-3 border-b border-hair/60 px-4 py-3 transition-colors hover:bg-surface2 ${
+                      !n.is_read ? "bg-surface/60" : ""
+                    }`}
+                  >
+                    {actor ? (
+                      <UserAvatar
+                        username={actor}
+                        displayName={notificationActorDisplayName(n)}
+                        avatarUrl={notificationActorAvatarUrl(n)}
+                        size={32}
+                      />
+                    ) : (
+                      <div className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-full border border-hair bg-surface2 text-ink2">
+                        <svg
+                          viewBox="0 0 24 24"
+                          className="h-4 w-4"
+                          fill="none"
+                          stroke="currentColor"
+                          strokeWidth="1.6"
+                          strokeLinecap="round"
+                          strokeLinejoin="round"
+                        >
+                          <path d="M6 16V11a6 6 0 1 1 12 0v5l1.5 2H4.5L6 16z" />
+                          <path d="M10 20a2 2 0 0 0 4 0" />
+                        </svg>
+                      </div>
+                    )}
+                    <div className="min-w-0 flex-1">
+                      <NotificationText notification={n} />
+                      <div className="mt-0.5 text-[11px] text-ink3">
+                        {notificationWhen(n.created_at)} ago
+                      </div>
                     </div>
-                  )}
-                  <div className="flex-1 min-w-0">
-                    <NotificationText notification={n} />
-                    <div className="text-[11px] text-ink3 mt-0.5">{notificationWhen(n.created_at)} ago</div>
+                    {!n.is_read && (
+                      <span className="mt-1.5 h-2 w-2 shrink-0 rounded-full bg-dx-red" />
+                    )}
                   </div>
-                  {!n.is_read && <span className="w-2 h-2 rounded-full bg-dx-red mt-1.5 shrink-0" />}
-                </div>
                 );
               })
             )}
           </div>
 
-          <div className="p-3 border-t border-hair text-center">
+          <div className="border-t border-hair p-3 text-center">
             <Link href="/notifications" className="text-[12px] text-dx-blue hover:underline">
               See all notifications →
             </Link>

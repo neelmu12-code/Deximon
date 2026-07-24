@@ -34,7 +34,9 @@ class Conversation(Base):
 class ConversationParticipant(Base):
     __tablename__ = "conversation_participants"
     __table_args__ = (
-        UniqueConstraint("conversation_id", "user_id", name="uq_conversation_participants_conversation_user"),
+        UniqueConstraint(
+            "conversation_id", "user_id", name="uq_conversation_participants_conversation_user"
+        ),
     )
 
     id: Mapped[UUID] = mapped_column(PG_UUID(as_uuid=True), primary_key=True, default=uuid4)

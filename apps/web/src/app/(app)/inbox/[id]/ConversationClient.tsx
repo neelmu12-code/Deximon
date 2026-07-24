@@ -3,6 +3,12 @@
 import Link from "next/link";
 import { FormEvent, useEffect, useRef, useState } from "react";
 import { useAuth } from "@/lib/auth";
+import {
+  addConversationMessage,
+  mergeConversationSnapshot,
+  parseChatSocketPayload,
+  reconcileConversationMessage,
+} from "@/lib/chat";
 import { ApiError, fetchAPI, wsUrl } from "@/lib/fetchAPI";
 import {
   formatPrice,
@@ -17,26 +23,12 @@ function errorMessage(error: unknown): string {
   return "Could not load this conversation.";
 }
 
-function cookieValue(name: string): string | null {
-  const match = document.cookie.split("; ").find((part) => part.startsWith(`${name}=`));
-  if (!match) return null;
-  return decodeURIComponent(match.split("=").slice(1).join("="));
-}
-
 function notifyInboxRefresh() {
   window.dispatchEvent(new CustomEvent("inbox:refresh"));
 }
 
 function avatarText(username: string): string {
   return username.slice(0, 2).toUpperCase();
-}
-
-function sameMessage(a: Message, b: Message): boolean {
-  return (
-    a.sender_id === b.sender_id &&
-    a.body === b.body &&
-    Math.abs(new Date(a.created_at).getTime() - new Date(b.created_at).getTime()) < 15000
-  );
 }
 
 export function ConversationClient({ id }: { id: string }) {
@@ -46,13 +38,11 @@ export function ConversationClient({ id }: { id: string }) {
   const [body, setBody] = useState("");
   const [loading, setLoading] = useState(true);
   const [sending, setSending] = useState(false);
-  const [socketConnected, setSocketConnected] = useState(false);
   const [error, setError] = useState<string | null>(null);
-
+  const [realtimeStatus, setRealtimeStatus] = useState<
+    "connecting" | "live" | "reconnecting" | "offline"
+  >("connecting");
   const messagesEndRef = useRef<HTMLDivElement | null>(null);
-  const socketRef = useRef<WebSocket | null>(null);
-  const reconnectTimerRef = useRef<number | null>(null);
-  const seenMessageIdsRef = useRef<Set<string>>(new Set());
 
   const currentUserId = user?.id ?? null;
   const listingHref = conversation ? `/market/${conversation.listing_id}` : "/market";
@@ -64,8 +54,8 @@ export function ConversationClient({ id }: { id: string }) {
     fetchAPI<ConversationDetail>(`/conversations/${id}`, { signal: controller.signal })
       .then((data) => {
         setConversation(data ?? null);
-        seenMessageIdsRef.current = new Set((data?.messages ?? []).map((message) => message.id));
         setError(null);
+        notifyInboxRefresh();
       })
       .catch((loadError: unknown) => {
         if (loadError instanceof Error && loadError.name === "AbortError") return;
@@ -77,113 +67,110 @@ export function ConversationClient({ id }: { id: string }) {
   }, [id]);
 
   useEffect(() => {
-    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
-  }, [conversation?.messages.length]);
+    if (initializing) {
+      setRealtimeStatus("connecting");
+      return;
+    }
+    if (!currentUserId) {
+      setRealtimeStatus("offline");
+      return;
+    }
 
-  useEffect(() => {
-    if (!conversation) return;
+    let websocket: WebSocket | null = null;
+    let retryTimer: number | null = null;
+    let retryCount = 0;
+    let stopped = false;
 
-    let cancelled = false;
-    let reconnectAttempts = 0;
+    async function refreshConversation() {
+      try {
+        const snapshot = await fetchAPI<ConversationDetail>(`/conversations/${id}`);
+        if (snapshot) {
+          setConversation((current) => mergeConversationSnapshot(current, snapshot));
+          notifyInboxRefresh();
+        }
+      } catch {
+        // The initial REST request owns the visible error state.
+      }
+    }
 
-    const connect = () => {
-      if (cancelled) return;
+    async function markConversationRead() {
+      try {
+        await fetchAPI(`/conversations/${id}/read`, { method: "POST" });
+      } catch {
+        // A later conversation refresh will retry read-state synchronization.
+      } finally {
+        notifyInboxRefresh();
+      }
+    }
 
-      const url = new URL(wsUrl(`/conversations/${conversation.id}/ws`));
-      const token =
-        cookieValue("access_token") ||
-        cookieValue("token") ||
-        cookieValue("auth_token");
+    function connect() {
+      if (stopped) return;
+      setRealtimeStatus(retryCount === 0 ? "connecting" : "reconnecting");
 
-      if (token) {
-        url.searchParams.set("token", token);
+      try {
+        websocket = new WebSocket(wsUrl(`/conversations/${id}/ws`));
+      } catch {
+        scheduleReconnect();
+        return;
       }
 
-      const socket = new WebSocket(url.toString());
-      socketRef.current = socket;
+      websocket.onmessage = (event) => {
+        const payload = parseChatSocketPayload(String(event.data));
+        if (!payload) return;
 
-      socket.onopen = () => {
-        if (socketRef.current !== socket) return;
+        if (payload.type === "ready") {
+          retryCount = 0;
+          setRealtimeStatus("live");
+          void refreshConversation();
+          return;
+        }
 
-        reconnectAttempts = 0;
-        setSocketConnected(true);
-
-        if (reconnectTimerRef.current) {
-          window.clearTimeout(reconnectTimerRef.current);
-          reconnectTimerRef.current = null;
+        if (payload.message.conversation_id !== id) return;
+        setConversation((current) =>
+          current ? reconcileConversationMessage(current, payload.message) : current,
+        );
+        if (payload.message.sender_id === currentUserId) {
+          notifyInboxRefresh();
+        } else {
+          void markConversationRead();
         }
       };
 
-      socket.onmessage = (event) => {
-        const payload = JSON.parse(event.data) as {
-          type: string;
-          conversation_id?: string;
-          message?: Message;
-        };
-
-        const incoming = payload.message;
-        if (payload.type !== "message" || !incoming) return;
-
-        notifyInboxRefresh();
-
-        setConversation((current) => {
-          if (!current) return current;
-
-          if (seenMessageIdsRef.current.has(incoming.id)) {
-            return current;
-          }
-
-          const optimisticIndex = current.messages.findIndex(
-            (item) => item.id.startsWith("optimistic-") && sameMessage(item, incoming),
-          );
-
-          if (optimisticIndex >= 0) {
-            const nextMessages = [...current.messages];
-            nextMessages[optimisticIndex] = incoming;
-            seenMessageIdsRef.current.add(incoming.id);
-
-            return {
-              ...current,
-              messages: nextMessages,
-              last_message: incoming,
-            };
-          }
-
-          seenMessageIdsRef.current.add(incoming.id);
-          return {
-            ...current,
-            messages: [...current.messages, incoming],
-            last_message: incoming,
-          };
-        });
+      websocket.onclose = (event) => {
+        websocket = null;
+        if (stopped) return;
+        if (event.code === 1008) {
+          setRealtimeStatus("offline");
+          return;
+        }
+        scheduleReconnect();
       };
 
-      socket.onerror = () => {
-        if (socketRef.current !== socket) return;
-        socket.close();
-      };
+      websocket.onerror = () => websocket?.close();
+    }
 
-      socket.onclose = () => {
-        setSocketConnected(false);
-        if (cancelled) return;
-
-        reconnectAttempts += 1;
-        const delay = Math.min(1000 * 2 ** Math.min(reconnectAttempts, 4), 10000);
-        reconnectTimerRef.current = window.setTimeout(connect, delay);
-      };
-    };
+    function scheduleReconnect() {
+      if (stopped || retryTimer !== null) return;
+      setRealtimeStatus("reconnecting");
+      const delay = Math.min(1000 * 2 ** retryCount, 10000);
+      retryCount += 1;
+      retryTimer = window.setTimeout(() => {
+        retryTimer = null;
+        connect();
+      }, delay);
+    }
 
     connect();
-
     return () => {
-      cancelled = true;
-      if (reconnectTimerRef.current) {
-        window.clearTimeout(reconnectTimerRef.current);
-      }
-      socketRef.current?.close();
-      socketRef.current = null;
+      stopped = true;
+      if (retryTimer !== null) window.clearTimeout(retryTimer);
+      websocket?.close();
     };
-  }, [conversation?.id]);
+  }, [currentUserId, id, initializing]);
+
+  useEffect(() => {
+    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
+  }, [conversation?.messages.length]);
 
   async function sendMessage(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -204,48 +191,22 @@ export function ConversationClient({ id }: { id: string }) {
       created_at: new Date().toISOString(),
     };
 
-    seenMessageIdsRef.current.add(optimisticId);
     setConversation((current) =>
-      current
-        ? {
-            ...current,
-            messages: [...current.messages, optimisticMessage],
-            last_message: optimisticMessage,
-          }
-        : current,
+      current ? addConversationMessage(current, optimisticMessage) : current,
     );
     setBody("");
 
     try {
-      const socket = socketRef.current;
-
-      if (socket && socket.readyState === WebSocket.OPEN) {
-        socket.send(trimmed);
-        notifyInboxRefresh();
-      } else {
-        const message = await fetchAPI<Message>(`/conversations/${conversation.id}/messages`, {
-          method: "POST",
-          body: { body: trimmed },
-        });
-
-        if (!message) throw new Error("Message was not returned.");
-        seenMessageIdsRef.current.add(message.id);
-
-        setConversation((current) =>
-          current
-            ? {
-                ...current,
-                messages: current.messages.map((item) =>
-                  item.id === optimisticId ? message : item,
-                ),
-                last_message: message,
-              }
-            : current,
-        );
-      }
+      const message = await fetchAPI<Message>(`/conversations/${conversation.id}/messages`, {
+        method: "POST",
+        body: { body: trimmed },
+      });
+      if (!message) throw new Error("Message was not returned.");
+      setConversation((current) =>
+        current ? reconcileConversationMessage(current, message, optimisticId) : current,
+      );
+      notifyInboxRefresh();
     } catch (sendError) {
-      seenMessageIdsRef.current.delete(optimisticId);
-
       setConversation((current) => {
         if (!current) return current;
 
@@ -255,7 +216,9 @@ export function ConversationClient({ id }: { id: string }) {
           ...current,
           messages: nextMessages,
           last_message:
-            current.last_message?.id === optimisticId ? nextMessages.at(-1) ?? null : current.last_message,
+            current.last_message?.id === optimisticId
+              ? (nextMessages.at(-1) ?? null)
+              : current.last_message,
         };
       });
 
@@ -326,8 +289,11 @@ export function ConversationClient({ id }: { id: string }) {
               <Link href={listingHref} className="text-[#D8232A] hover:underline">
                 View listing
               </Link>
-              <span className={socketConnected ? "text-emerald-400" : "text-amber-400"}>
-                {socketConnected ? "Live" : "Reconnecting..."}
+              <span className={realtimeStatus === "live" ? "text-emerald-400" : "text-amber-400"}>
+                {realtimeStatus === "live" && "Live"}
+                {realtimeStatus === "connecting" && "Connecting..."}
+                {realtimeStatus === "reconnecting" && "Reconnecting..."}
+                {realtimeStatus === "offline" && "Offline"}
               </span>
             </div>
           </div>
@@ -388,9 +354,7 @@ export function ConversationClient({ id }: { id: string }) {
                       <p className="whitespace-pre-wrap break-words">{message.body}</p>
 
                       <div
-                        className={`mt-2 text-[11px] ${
-                          isMine ? "text-red-100" : "text-[#8d8d98]"
-                        }`}
+                        className={`mt-2 text-[11px] ${isMine ? "text-red-100" : "text-[#8d8d98]"}`}
                       >
                         {new Date(message.created_at).toLocaleString([], {
                           month: "short",

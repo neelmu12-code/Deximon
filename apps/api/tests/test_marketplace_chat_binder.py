@@ -213,6 +213,113 @@ def test_listing_scoped_conversation_and_messages(client: TestClient) -> None:
     assert outsider_view.status_code == 403
 
 
+def test_rest_message_broadcasts_to_participant_websocket(client: TestClient) -> None:
+    seller = register_user(client, "seller@example.com", "seller")
+    buyer = register_user(client, "buyer@example.com", "buyer")
+    seller_headers = auth_headers(seller)
+    buyer_headers = auth_headers(buyer)
+    card = create_card(client, seller_headers, "Pikachu")
+    listing = create_listing(client, seller_headers, str(card["id"]), "12.50")
+    conversation = client.post(
+        "/conversations",
+        headers=buyer_headers,
+        json={"listing_id": listing["id"]},
+    ).json()
+
+    websocket_url = f"/conversations/{conversation['id']}/ws?token={seller['access_token']}"
+    with client.websocket_connect(websocket_url) as seller_socket:
+        assert seller_socket.receive_json()["type"] == "ready"
+
+        response = client.post(
+            f"/conversations/{conversation['id']}/messages",
+            headers=buyer_headers,
+            json={"body": "Is this still available?"},
+        )
+        assert response.status_code == 201
+
+        event = seller_socket.receive_json()
+        assert event["type"] == "message"
+        assert event["message"]["id"] == response.json()["id"]
+        assert event["message"]["sender_username"] == "buyer"
+
+
+def test_conversation_unread_counts_clear_when_opened(client: TestClient) -> None:
+    seller = register_user(client, "seller@example.com", "seller")
+    buyer = register_user(client, "buyer@example.com", "buyer")
+    seller_headers = auth_headers(seller)
+    buyer_headers = auth_headers(buyer)
+    card = create_card(client, seller_headers, "Pikachu")
+    listing = create_listing(client, seller_headers, str(card["id"]), "12.50")
+    conversation = client.post(
+        "/conversations",
+        headers=buyer_headers,
+        json={"listing_id": listing["id"]},
+    ).json()
+    conversation_id = conversation["id"]
+
+    sent = client.post(
+        f"/conversations/{conversation_id}/messages",
+        headers=buyer_headers,
+        json={"body": "Is this still available?"},
+    )
+    assert sent.status_code == 201
+
+    seller_unread = client.get("/conversations/unread-count", headers=seller_headers)
+    buyer_unread = client.get("/conversations/unread-count", headers=buyer_headers)
+    assert seller_unread.json() == {"unread_count": 1}
+    assert buyer_unread.json() == {"unread_count": 0}
+
+    seller_inbox = client.get("/conversations", headers=seller_headers)
+    assert seller_inbox.status_code == 200
+    assert seller_inbox.json()[0]["unread_count"] == 1
+
+    opened = client.get(f"/conversations/{conversation_id}", headers=seller_headers)
+    assert opened.status_code == 200
+    assert opened.json()["unread_count"] == 0
+    assert client.get(
+        "/conversations/unread-count",
+        headers=seller_headers,
+    ).json() == {"unread_count": 0}
+
+
+def test_websocket_message_broadcasts_to_both_participants(client: TestClient) -> None:
+    seller = register_user(client, "seller@example.com", "seller")
+    buyer = register_user(client, "buyer@example.com", "buyer")
+    seller_headers = auth_headers(seller)
+    buyer_headers = auth_headers(buyer)
+    card = create_card(client, seller_headers, "Pikachu")
+    listing = create_listing(client, seller_headers, str(card["id"]), "12.50")
+    conversation = client.post(
+        "/conversations",
+        headers=buyer_headers,
+        json={"listing_id": listing["id"]},
+    ).json()
+    conversation_id = conversation["id"]
+
+    seller_url = f"/conversations/{conversation_id}/ws?token={seller['access_token']}"
+    buyer_url = f"/conversations/{conversation_id}/ws"
+    with client.websocket_connect(seller_url) as seller_socket:
+        assert seller_socket.receive_json()["type"] == "ready"
+        with client.websocket_connect(buyer_url) as buyer_socket:
+            assert buyer_socket.receive_json()["type"] == "ready"
+
+            buyer_socket.send_text("Can you ship this tomorrow?")
+            seller_event = seller_socket.receive_json()
+            buyer_event = buyer_socket.receive_json()
+
+    assert seller_event["type"] == "message"
+    assert buyer_event == seller_event
+    assert seller_event["message"]["sender_username"] == "buyer"
+    assert seller_event["message"]["body"] == "Can you ship this tomorrow?"
+
+    persisted = client.get(
+        f"/conversations/{conversation_id}",
+        headers=seller_headers,
+    )
+    assert persisted.status_code == 200
+    assert persisted.json()["messages"][-1]["id"] == seller_event["message"]["id"]
+
+
 def test_seller_marks_listing_sold_from_chat_and_records_buyer(client: TestClient) -> None:
     seller = register_user(client, "seller@example.com", "seller")
     buyer = register_user(client, "buyer@example.com", "buyer")
@@ -281,7 +388,9 @@ def test_marketplace_hides_pending_and_sold_listings(client: TestClient) -> None
     )
     # Hidden from the default view, still reachable with an explicit filter.
     assert client.get("/market/listings").json() == []
-    assert [row["id"] for row in client.get("/market/listings?status=on_hold").json()] == [listing["id"]]
+    assert [row["id"] for row in client.get("/market/listings?status=on_hold").json()] == [
+        listing["id"]
+    ]
 
     client.patch(
         f"/conversations/{conversation_id}/listing-status",
@@ -307,7 +416,9 @@ def test_seller_marks_sold_with_chosen_buyer_from_the_listing(client: TestClient
     card = create_card(client, seller_headers)
     listing = create_listing(client, seller_headers, str(card["id"]))
     for user in (buyer, bystander):
-        client.post("/conversations", headers=auth_headers(user), json={"listing_id": listing["id"]})
+        client.post(
+            "/conversations", headers=auth_headers(user), json={"listing_id": listing["id"]}
+        )
 
     # This is what fills the seller's "who did you sell to?" picker.
     interested = client.get(f"/conversations?listing_id={listing['id']}", headers=seller_headers)
@@ -369,7 +480,9 @@ def test_recorded_buyer_cannot_be_swapped_afterwards(client: TestClient) -> None
     card = create_card(client, seller_headers)
     listing = create_listing(client, seller_headers, str(card["id"]))
     for user in (buyer, other):
-        client.post("/conversations", headers=auth_headers(user), json={"listing_id": listing["id"]})
+        client.post(
+            "/conversations", headers=auth_headers(user), json={"listing_id": listing["id"]}
+        )
 
     first = client.patch(
         f"/market/listings/{listing['id']}",
@@ -559,9 +672,7 @@ def test_card_update_and_delete_scoped_to_owner(client: TestClient) -> None:
         ).status_code
         == 404
     )
-    assert (
-        client.delete(f"/binder/cards/{card['id']}", headers=intruder_headers).status_code == 404
-    )
+    assert client.delete(f"/binder/cards/{card['id']}", headers=intruder_headers).status_code == 404
 
 
 def _binder_card_names(body: dict[str, object]) -> list[str]:

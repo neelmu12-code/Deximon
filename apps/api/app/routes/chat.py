@@ -1,7 +1,7 @@
+from collections import defaultdict
 from datetime import UTC, datetime
 from typing import Annotated
 from uuid import UUID
-from collections import defaultdict
 
 from fastapi import (
     APIRouter,
@@ -17,7 +17,7 @@ from sqlalchemy.orm import Session
 
 from app.core.config import get_settings
 from app.core.security import decode_access_token
-from app.db.session import SessionLocal, get_db
+from app.db.session import get_db
 from app.dependencies.auth import get_current_user
 from app.models.card import Card
 from app.models.chat import Conversation, ConversationParticipant, Message
@@ -56,7 +56,7 @@ class ConversationConnectionManager:
         if not sockets:
             self._connections.pop(conversation_id, None)
 
-    async def broadcast(self, conversation_id: UUID, payload: dict) -> None:
+    async def broadcast(self, conversation_id: UUID, payload: dict[str, object]) -> None:
         stale: list[WebSocket] = []
         for socket in list(self._connections.get(conversation_id, set())):
             try:
@@ -73,7 +73,9 @@ manager = ConversationConnectionManager()
 def _message_response(db: Session, message: Message) -> MessageResponse:
     sender = db.get(User, message.sender_id)
     if sender is None:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Message sender not found")
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="Message sender not found"
+        )
     return MessageResponse(
         id=message.id,
         conversation_id=message.conversation_id,
@@ -188,7 +190,10 @@ def _total_unread_count(db: Session, user_id: UUID) -> int:
             select(ConversationParticipant).where(ConversationParticipant.user_id == user_id)
         )
     )
-    return sum(_conversation_unread_count(db, participant.conversation_id, user_id) for participant in participant_rows)
+    return sum(
+        _conversation_unread_count(db, participant.conversation_id, user_id)
+        for participant in participant_rows
+    )
 
 
 async def _notify_message(
@@ -214,6 +219,24 @@ async def _notify_message(
             **actor_meta(sender),
         },
     )
+
+
+async def _create_message(
+    db: Session,
+    conversation: Conversation,
+    listing: Listing,
+    sender: User,
+    body: str,
+) -> MessageResponse:
+    message = Message(conversation_id=conversation.id, sender_id=sender.id, body=body)
+    db.add(message)
+    db.commit()
+    db.refresh(message)
+
+    response = _message_response(db, message)
+    await _notify_message(db, conversation, listing, sender)
+    await _broadcast_message(db, conversation.id, message)
+    return response
 
 
 def _conversation_response(
@@ -312,7 +335,9 @@ def create_conversation(
             detail="You cannot open a buyer chat on your own listing",
         )
     if listing.status == ListingStatus.CANCELLED:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Listing is not available")
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST, detail="Listing is not available"
+        )
 
     conversation = db.scalar(
         select(Conversation).where(
@@ -339,7 +364,9 @@ def create_conversation(
 
     response = _conversation_response(db, conversation, current_user_id=current_user.id)
     if not isinstance(response, ConversationResponse):
-        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Invalid response")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Invalid response"
+        )
     if not created:
         return response
     return response
@@ -363,7 +390,9 @@ def get_conversation(
         include_messages=True,
     )
     if not isinstance(response, ConversationDetailResponse):
-        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Invalid response")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Invalid response"
+        )
     return response
 
 
@@ -413,7 +442,9 @@ async def update_conversation_listing_status(
 
     response = _conversation_response(db, conversation, include_messages=True)
     if not isinstance(response, ConversationDetailResponse):
-        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Invalid response")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Invalid response"
+        )
     return response
 
 
@@ -452,19 +483,19 @@ async def send_message(
 
     body = payload.body.strip()
     if not body:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Message cannot be empty")
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST, detail="Message cannot be empty"
+        )
 
-    message = Message(conversation_id=conversation.id, sender_id=current_user.id, body=body)
-    db.add(message)
-    db.commit()
-    db.refresh(message)
-    await _notify_message(db, conversation, listing, current_user)
-    await _broadcast_message(db, conversation.id, message)
-    return _message_response(db, message)
+    return await _create_message(db, conversation, listing, current_user, body)
 
 
 @router.websocket("/{conversation_id}/ws")
-async def conversation_websocket(websocket: WebSocket, conversation_id: UUID) -> None:
+async def conversation_websocket(
+    websocket: WebSocket,
+    conversation_id: UUID,
+    db: DbSession,
+) -> None:
     settings = get_settings()
     token = websocket.query_params.get("token") or websocket.cookies.get(settings.auth_cookie_name)
     if not token:
@@ -478,13 +509,14 @@ async def conversation_websocket(websocket: WebSocket, conversation_id: UUID) ->
         await websocket.close(code=status.WS_1008_POLICY_VIOLATION)
         return
 
-    db = SessionLocal()
     try:
         user = db.get(User, user_id)
         if user is None or not user.is_active:
             await websocket.close(code=status.WS_1008_POLICY_VIOLATION)
             return
-        conversation, listing, _card, _requester, _seller = _conversation_context(db, conversation_id)
+        conversation, listing, _card, _requester, _seller = _conversation_context(
+            db, conversation_id
+        )
         _require_participant(user, conversation, listing)
 
         _ensure_participant(db, conversation.id, conversation.requester_id)
@@ -497,16 +529,10 @@ async def conversation_websocket(websocket: WebSocket, conversation_id: UUID) ->
             body = (await websocket.receive_text()).strip()
             if not body:
                 continue
-            message = Message(conversation_id=conversation.id, sender_id=user.id, body=body[:2000])
-            db.add(message)
-            db.commit()
-            db.refresh(message)
-            await _notify_message(db, conversation, listing, user)
-            await _broadcast_message(db, conversation_id, message)
+            await _create_message(db, conversation, listing, user, body[:2000])
     except HTTPException:
         await websocket.close(code=status.WS_1008_POLICY_VIOLATION)
     except WebSocketDisconnect:
         return
     finally:
         manager.disconnect(conversation_id, websocket)
-        db.close()
