@@ -26,6 +26,11 @@ DbSession = Annotated[Session, Depends(get_db)]
 CurrentUser = Annotated[User, Depends(get_current_user)]
 
 
+def _format_rating(rating: float) -> str:
+    """Drop the trailing ".0" so whole stars read "5-star", halves "4.5-star"."""
+    return f"{rating:g}"
+
+
 def _review_response(db: Session, review: SellerReview) -> ReviewResponse:
     reviewer = db.get(User, review.reviewer_id)
     if reviewer is None:
@@ -174,7 +179,7 @@ async def create_seller_review(
         user_id=seller.id,
         type=NotificationType.review,
         title=current_user.username,
-        body=f"left you a {payload.rating}-star review",
+        body=f"left you a {_format_rating(payload.rating)}-star review",
         meta={
             "review_id": str(review.id),
             "seller_username": seller.username,

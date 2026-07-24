@@ -268,6 +268,9 @@ export function MarketplaceClient() {
     const search = new URLSearchParams({ limit: String(LISTING_PAGE_LIMIT) });
     const trimmed = query.trim();
     if (trimmed) search.set("q", trimmed);
+    // Ask the API for exactly the selected statuses. With none selected it falls
+    // back to available-only, so sold listings never surface until "Sold" is picked.
+    for (const value of selectedStatuses) search.append("status", value);
 
     setLoading(true);
     fetchAPI<Listing[]>(`/market/listings?${search.toString()}`, { signal: controller.signal })
@@ -283,7 +286,7 @@ export function MarketplaceClient() {
       .finally(() => setLoading(false));
 
     return () => controller.abort();
-  }, [query, refreshKey]);
+  }, [query, refreshKey, selectedStatuses]);
 
   const setFacets = useMemo(() => deriveFacet(listings, (c) => c.set_code), [listings]);
   const rarityFacets = useMemo(() => deriveFacet(listings, (c) => c.rarity), [listings]);

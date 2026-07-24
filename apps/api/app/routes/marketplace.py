@@ -106,7 +106,7 @@ def _get_listing(db: Session, listing_id: UUID) -> Listing:
 def list_listings(
     db: DbSession,
     q: Annotated[str | None, Query(min_length=1, max_length=100)] = None,
-    status_filter: Annotated[ListingStatus | None, Query(alias="status")] = None,
+    status_filter: Annotated[list[ListingStatus] | None, Query(alias="status")] = None,
     set_code: Annotated[str | None, Query(alias="set", max_length=20)] = None,
     rarity: Annotated[str | None, Query(max_length=40)] = None,
     card_type: Annotated[str | None, Query(alias="type", max_length=40)] = None,
@@ -117,12 +117,12 @@ def list_listings(
 ) -> list[ListingResponse]:
     stmt = select(Listing).join(Card, Listing.card_id == Card.id)
 
-    if status_filter is None:
+    if not status_filter:
         # The public marketplace shows only what's for sale. Pending (on_hold),
         # sold, and cancelled listings are hidden unless asked for explicitly.
         stmt = stmt.where(Listing.status == ListingStatus.AVAILABLE)
     else:
-        stmt = stmt.where(Listing.status == status_filter)
+        stmt = stmt.where(Listing.status.in_(status_filter))
 
     if seller:
         stmt = stmt.join(User, Listing.seller_id == User.id).where(
