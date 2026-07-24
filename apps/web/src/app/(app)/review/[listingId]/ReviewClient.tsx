@@ -10,19 +10,7 @@ import { ApiError, fetchAPI } from "@/lib/fetchAPI";
 import { formatPrice, listingImageUrl, type Listing } from "@/lib/marketplace";
 import type { ReviewEligibility } from "@/lib/reviews";
 
-const MAX_COMMENT_WORDS = 100;
-
-function wordCount(text: string): number {
-  const words = text.trim();
-  return words === "" ? 0 : words.split(/\s+/).length;
-}
-
-/** Trim pasted or typed text down to at most `max` whitespace-separated words. */
-function limitToWords(text: string, max: number): string {
-  const words = text.split(/\s+/).filter(Boolean);
-  if (words.length <= max) return text;
-  return words.slice(0, max).join(" ");
-}
+const MAX_COMMENT_CHARS = 250;
 
 const RATING_WORDS: Record<number, string> = {
   1: "Poor",
@@ -313,14 +301,14 @@ export function ReviewClient({ listingId }: { listingId: string }) {
         Comment <span className="font-normal text-ink3">(optional)</span>
         <textarea
           value={comment}
-          onChange={(event) => setComment(limitToWords(event.target.value, MAX_COMMENT_WORDS))}
+          onChange={(event) => setComment(event.target.value.slice(0, MAX_COMMENT_CHARS))}
           rows={4}
-          maxLength={1000}
+          maxLength={MAX_COMMENT_CHARS}
           placeholder="How was the communication, packing and shipping?"
           className="mt-2 w-full break-words rounded-md border border-hair bg-surface2 px-3 py-2 text-sm text-ink outline-none focus:border-ink3"
         />
         <span className="mt-1 block text-right text-[11px] text-ink3 tabular-nums">
-          {wordCount(comment)}/{MAX_COMMENT_WORDS} words
+          {comment.length}/{MAX_COMMENT_CHARS}
         </span>
       </label>
 

@@ -36,7 +36,7 @@ class SellerReview(Base):
         PG_UUID(as_uuid=True), ForeignKey("listings.id", ondelete="SET NULL"), nullable=True
     )
     rating: Mapped[float] = mapped_column(Numeric(2, 1, asdecimal=False), nullable=False)
-    comment: Mapped[str | None] = mapped_column(String(1000), nullable=True)
+    comment: Mapped[str | None] = mapped_column(String(500), nullable=True)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, server_default=func.now()
     )

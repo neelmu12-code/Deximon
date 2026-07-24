@@ -14,6 +14,7 @@ import {
   formatPrice,
   listingStatusLabel,
   type ConversationDetail,
+  type ListingStatus,
   type Message,
 } from "@/lib/marketplace";
 
@@ -38,6 +39,7 @@ export function ConversationClient({ id }: { id: string }) {
   const [body, setBody] = useState("");
   const [loading, setLoading] = useState(true);
   const [sending, setSending] = useState(false);
+  const [statusBusy, setStatusBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [realtimeStatus, setRealtimeStatus] = useState<
     "connecting" | "live" | "reconnecting" | "offline"
@@ -229,6 +231,26 @@ export function ConversationClient({ id }: { id: string }) {
     }
   }
 
+  async function setListingStatus(status: ListingStatus) {
+    if (!conversation) return;
+    setStatusBusy(true);
+    setError(null);
+    try {
+      const updated = await fetchAPI<ConversationDetail>(
+        `/conversations/${conversation.id}/listing-status`,
+        { method: "PATCH", body: { status } },
+      );
+      if (updated) {
+        setConversation((current) => mergeConversationSnapshot(current, updated));
+        notifyInboxRefresh();
+      }
+    } catch (statusError) {
+      setError(errorMessage(statusError));
+    } finally {
+      setStatusBusy(false);
+    }
+  }
+
   if (loading) {
     return (
       <div className="rounded-2xl border border-[#2a2a2f] bg-[#111216] p-12 text-center text-[#a1a1aa]">
@@ -245,6 +267,7 @@ export function ConversationClient({ id }: { id: string }) {
     );
   }
 
+  const isSeller = Boolean(user && user.username === conversation.seller_username);
   const isBuyer = Boolean(user && user.username === conversation.requester_username);
   const soldToThisBuyer =
     conversation.listing_status === "sold" &&
@@ -379,6 +402,14 @@ export function ConversationClient({ id }: { id: string }) {
           <div ref={messagesEndRef} />
         </div>
 
+        {isSeller && (
+          <SellerStatusBar
+            status={conversation.listing_status}
+            busy={statusBusy}
+            onChange={setListingStatus}
+          />
+        )}
+
         {soldToThisBuyer && (
           <BuyerReviewBar
             sellerUsername={conversation.seller_username}
@@ -407,6 +438,50 @@ export function ConversationClient({ id }: { id: string }) {
         </form>
       </div>
     </section>
+  );
+}
+
+function SellerStatusBar({
+  status,
+  busy,
+  onChange,
+}: {
+  status: ListingStatus;
+  busy: boolean;
+  onChange: (status: ListingStatus) => void;
+}) {
+  if (status === "sold" || status === "cancelled") {
+    return (
+      <div className="flex items-center gap-2 border-t border-[#2a2a2f] bg-[#141519] px-3 py-2.5 text-xs md:px-4">
+        <span className="text-[#8d8d98]">This listing is</span>
+        <span className="font-medium text-[#f2f2f0]">{listingStatusLabel(status)}</span>
+      </div>
+    );
+  }
+
+  const pending = status === "on_hold";
+  return (
+    <div className="flex flex-wrap items-center gap-2 border-t border-[#2a2a2f] bg-[#141519] px-3 py-2.5 md:px-4">
+      <span className="mr-auto text-xs text-[#8d8d98]">
+        Listing is <span className="font-medium text-[#d7d7dc]">{listingStatusLabel(status)}</span>
+      </span>
+      <button
+        type="button"
+        disabled={busy}
+        onClick={() => onChange(pending ? "available" : "on_hold")}
+        className="rounded-xl border border-[#3a3a41] bg-[#18191f] px-3 py-1.5 text-xs font-medium text-[#d7d7dc] transition hover:bg-[#20222a] disabled:cursor-not-allowed disabled:opacity-50"
+      >
+        {pending ? "Back to available" : "Mark pending"}
+      </button>
+      <button
+        type="button"
+        disabled={busy}
+        onClick={() => onChange("sold")}
+        className="rounded-xl bg-emerald-600 px-3 py-1.5 text-xs font-medium text-white transition hover:bg-emerald-500 disabled:cursor-not-allowed disabled:opacity-50"
+      >
+        Mark sold
+      </button>
+    </div>
   );
 }
 
