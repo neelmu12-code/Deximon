@@ -10,13 +10,97 @@ import { ApiError, fetchAPI } from "@/lib/fetchAPI";
 import { formatPrice, listingImageUrl, type Listing } from "@/lib/marketplace";
 import type { ReviewEligibility } from "@/lib/reviews";
 
-const RATING_LABELS: Record<number, string> = {
+const MAX_COMMENT_WORDS = 100;
+
+function wordCount(text: string): number {
+  const words = text.trim();
+  return words === "" ? 0 : words.split(/\s+/).length;
+}
+
+/** Trim pasted or typed text down to at most `max` whitespace-separated words. */
+function limitToWords(text: string, max: number): string {
+  const words = text.split(/\s+/).filter(Boolean);
+  if (words.length <= max) return text;
+  return words.slice(0, max).join(" ");
+}
+
+const RATING_WORDS: Record<number, string> = {
   1: "Poor",
   2: "Fair",
   3: "Good",
   4: "Great",
   5: "Excellent",
 };
+
+const STAR_POINTS = "6,1 7.2,4.4 10.8,4.5 7.9,6.6 8.9,10.1 6,8 3.1,10.1 4.1,6.6 1.2,4.5 4.8,4.4";
+
+/**
+ * Five clickable stars supporting half ratings: clicking a star once fills it
+ * halfway (e.g. 4.5), clicking the same star again fills it fully, and a third
+ * click drops it back to a half.
+ */
+function StarRatingInput({
+  rating,
+  onChange,
+}: {
+  rating: number;
+  onChange: (value: number) => void;
+}) {
+  function handleClick(star: number) {
+    if (rating === star - 0.5) {
+      onChange(star); // second click on this star → full
+    } else if (rating === star) {
+      onChange(star - 0.5); // clicking a full star again → back to half
+    } else {
+      onChange(star - 0.5); // first click on this star → half
+    }
+  }
+
+  return (
+    <div className="flex items-center gap-1.5">
+      {[1, 2, 3, 4, 5].map((star) => {
+        const fill = Math.max(0, Math.min(1, rating - (star - 1)));
+        return (
+          <button
+            key={star}
+            type="button"
+            aria-label={`${star} star${star === 1 ? "" : "s"}`}
+            onClick={() => handleClick(star)}
+            className="relative h-7 w-7 text-dx-gold transition-transform hover:scale-110"
+          >
+            <svg
+              viewBox="0 0 12 12"
+              className="absolute inset-0 h-7 w-7 text-ink3"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="1"
+              strokeLinejoin="round"
+            >
+              <polygon points={STAR_POINTS} />
+            </svg>
+            {fill > 0 && (
+              <span
+                className="absolute inset-y-0 left-0 overflow-hidden"
+                style={{ width: `${fill * 100}%` }}
+              >
+                <svg
+                  viewBox="0 0 12 12"
+                  className="h-7 w-7 max-w-none"
+                  fill="currentColor"
+                  stroke="currentColor"
+                  strokeWidth="1"
+                  strokeLinejoin="round"
+                >
+                  <polygon points={STAR_POINTS} />
+                </svg>
+              </span>
+            )}
+          </button>
+        );
+      })}
+    </div>
+  );
+}
 
 function errorMessage(error: unknown): string {
   if (error instanceof ApiError) return error.message;
@@ -213,35 +297,31 @@ export function ReviewClient({ listingId }: { listingId: string }) {
 
       <div className="mt-6">
         <div className="text-sm font-medium">Rating</div>
-        <div className="mt-2 flex items-center gap-2">
-          {[1, 2, 3, 4, 5].map((value) => (
-            <button
-              key={value}
-              type="button"
-              aria-label={`${value} star${value === 1 ? "" : "s"}`}
-              aria-pressed={rating === value}
-              onClick={() => setRating(value)}
-              className={`text-2xl leading-none transition-colors ${
-                value <= rating ? "text-dx-gold" : "text-ink3 hover:text-ink2"
-              }`}
-            >
-              ★
-            </button>
-          ))}
-          <span className="ml-2 text-sm text-ink2">{RATING_LABELS[rating]}</span>
+        <div className="mt-2 flex items-center gap-3">
+          <StarRatingInput rating={rating} onChange={setRating} />
+          <span className="text-sm text-ink2 tabular-nums">
+            {rating % 1 === 0 ? rating.toFixed(0) : rating.toFixed(1)}
+            {RATING_WORDS[rating] ? ` · ${RATING_WORDS[rating]}` : ""}
+          </span>
         </div>
+        <p className="mt-1.5 text-[12px] text-ink3">
+          Click a star once for a half, twice for a full star.
+        </p>
       </div>
 
       <label className="mt-5 block text-sm font-medium">
         Comment <span className="font-normal text-ink3">(optional)</span>
         <textarea
           value={comment}
-          onChange={(event) => setComment(event.target.value)}
+          onChange={(event) => setComment(limitToWords(event.target.value, MAX_COMMENT_WORDS))}
           rows={4}
-          maxLength={500}
+          maxLength={1000}
           placeholder="How was the communication, packing and shipping?"
-          className="mt-2 w-full rounded-md border border-hair bg-surface2 px-3 py-2 text-sm text-ink outline-none focus:border-ink3"
+          className="mt-2 w-full break-words rounded-md border border-hair bg-surface2 px-3 py-2 text-sm text-ink outline-none focus:border-ink3"
         />
+        <span className="mt-1 block text-right text-[11px] text-ink3 tabular-nums">
+          {wordCount(comment)}/{MAX_COMMENT_WORDS} words
+        </span>
       </label>
 
       {error && <p className="mt-3 text-sm text-red-500">{error}</p>}

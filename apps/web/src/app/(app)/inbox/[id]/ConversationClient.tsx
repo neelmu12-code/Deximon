@@ -245,6 +245,12 @@ export function ConversationClient({ id }: { id: string }) {
     );
   }
 
+  const isBuyer = Boolean(user && user.username === conversation.requester_username);
+  const soldToThisBuyer =
+    conversation.listing_status === "sold" &&
+    isBuyer &&
+    conversation.listing_buyer_id === currentUserId;
+
   return (
     <section className="space-y-5">
       <header className="rounded-2xl border border-[#2a2a2f] bg-[#111216] p-4 shadow-[0_8px_24px_rgba(0,0,0,0.28)]">
@@ -373,6 +379,13 @@ export function ConversationClient({ id }: { id: string }) {
           <div ref={messagesEndRef} />
         </div>
 
+        {soldToThisBuyer && (
+          <BuyerReviewBar
+            sellerUsername={conversation.seller_username}
+            listingId={conversation.listing_id}
+          />
+        )}
+
         <form
           onSubmit={sendMessage}
           className="flex gap-2 border-t border-[#2a2a2f] bg-[#111216] p-3 md:p-4"
@@ -394,5 +407,27 @@ export function ConversationClient({ id }: { id: string }) {
         </form>
       </div>
     </section>
+  );
+}
+
+function BuyerReviewBar({
+  sellerUsername,
+  listingId,
+}: {
+  sellerUsername: string;
+  listingId: string;
+}) {
+  return (
+    <div className="flex flex-wrap items-center gap-2 border-t border-[#2a2a2f] bg-[#161318] px-3 py-2.5 md:px-4">
+      <span className="mr-auto text-xs text-[#b5b5bd]">
+        You bought this from @{sellerUsername}. How did it go?
+      </span>
+      <Link
+        href={`/review/${listingId}`}
+        className="rounded-xl bg-[#D8232A] px-3.5 py-2 text-xs font-medium text-white transition hover:bg-[#b91c22]"
+      >
+        Review seller
+      </Link>
+    </div>
   );
 }

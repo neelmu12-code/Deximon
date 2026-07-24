@@ -418,6 +418,58 @@ def test_review_creates_notification_for_seller(client: TestClient) -> None:
     assert "5-star" in payload["notifications"][0]["body"]
 
 
+def test_review_accepts_half_star_rating(client: TestClient) -> None:
+    seller = register_user(client, "seller@example.com", "seller")
+    buyer = register_user(client, "buyer@example.com", "buyer")
+    seller_headers = auth_headers(seller)
+    buyer_headers = auth_headers(buyer)
+    complete_sale(client, seller_headers, buyer_headers)
+
+    created = client.post(
+        "/reviews/seller/seller",
+        headers=buyer_headers,
+        json={"rating": 4.5, "comment": "Almost perfect"},
+    )
+    assert created.status_code == 201
+    assert created.json()["rating"] == 4.5
+
+    listed = client.get("/reviews/seller/seller")
+    assert listed.json()["avg_rating"] == 4.5
+
+    notifications = client.get("/notifications", headers=seller_headers)
+    assert "4.5-star" in notifications.json()["notifications"][0]["body"]
+
+
+def test_review_rejects_comment_over_word_limit(client: TestClient) -> None:
+    seller = register_user(client, "seller@example.com", "seller")
+    buyer = register_user(client, "buyer@example.com", "buyer")
+    seller_headers = auth_headers(seller)
+    buyer_headers = auth_headers(buyer)
+    complete_sale(client, seller_headers, buyer_headers)
+
+    refused = client.post(
+        "/reviews/seller/seller",
+        headers=buyer_headers,
+        json={"rating": 5, "comment": " ".join(["word"] * 101)},
+    )
+    assert refused.status_code == 422
+
+
+def test_review_rejects_off_step_rating(client: TestClient) -> None:
+    seller = register_user(client, "seller@example.com", "seller")
+    buyer = register_user(client, "buyer@example.com", "buyer")
+    seller_headers = auth_headers(seller)
+    buyer_headers = auth_headers(buyer)
+    complete_sale(client, seller_headers, buyer_headers)
+
+    refused = client.post(
+        "/reviews/seller/seller",
+        headers=buyer_headers,
+        json={"rating": 4.3},
+    )
+    assert refused.status_code == 422
+
+
 def test_listing_status_change_notifies_requester(client: TestClient) -> None:
     seller = register_user(client, "seller@example.com", "seller")
     buyer = register_user(client, "buyer@example.com", "buyer")

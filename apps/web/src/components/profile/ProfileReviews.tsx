@@ -71,7 +71,9 @@ export function ProfileReviews({ username }: { username: string }) {
                 </Link>
                 <Stars rating={review.rating} />
               </div>
-              {review.comment && <p className="text-sm text-ink2 mt-1">{review.comment}</p>}
+              {review.comment && (
+                <p className="text-sm text-ink2 mt-1 break-words">{review.comment}</p>
+              )}
             </div>
           ))}
         </div>
