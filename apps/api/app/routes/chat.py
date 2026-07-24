@@ -1,4 +1,4 @@
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from typing import Annotated
 from uuid import UUID
 from collections import defaultdict
@@ -158,7 +158,7 @@ def _mark_conversation_read(
     user_id: UUID,
 ) -> None:
     participant = _ensure_participant(db, conversation_id, user_id)
-    participant.last_read_at = datetime.now(timezone.utc)
+    participant.last_read_at = datetime.now(UTC)
     db.add(participant)
     db.commit()
 

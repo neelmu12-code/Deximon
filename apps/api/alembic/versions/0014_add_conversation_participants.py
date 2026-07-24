@@ -5,16 +5,16 @@ Revises: 0013_notification_review_prompt
 Create Date: 2026-07-24 04:35:22.453077
 
 """
-from typing import Sequence, Union
+from collections.abc import Sequence
 
 from alembic import op
 import sqlalchemy as sa
 
 
 revision: str = '0014_add_conversation_participants'
-down_revision: Union[str, None] = '0013_notification_review_prompt'
-branch_labels: Union[str, Sequence[str], None] = None
-depends_on: Union[str, Sequence[str], None] = None
+down_revision: str | None = '0013_notification_review_prompt'
+branch_labels: str | Sequence[str] | None = None
+depends_on: str | Sequence[str] | None = None
 
 
 def upgrade() -> None:
