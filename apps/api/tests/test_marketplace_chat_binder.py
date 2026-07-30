@@ -213,6 +213,43 @@ def test_listing_scoped_conversation_and_messages(client: TestClient) -> None:
     assert outsider_view.status_code == 403
 
 
+def test_outsider_cannot_access_or_message_listing_conversation(client: TestClient) -> None:
+    seller = register_user(client, "seller@example.com", "seller")
+    buyer = register_user(client, "buyer@example.com", "buyer")
+    outsider = register_user(client, "outsider@example.com", "outsider")
+    seller_headers = auth_headers(seller)
+    buyer_headers = auth_headers(buyer)
+    outsider_headers = auth_headers(outsider)
+    card = create_card(client, seller_headers, "Pikachu")
+    listing = create_listing(client, seller_headers, str(card["id"]), "12.50")
+
+    conversation = client.post(
+        "/conversations",
+        headers=buyer_headers,
+        json={"listing_id": listing["id"]},
+    )
+    assert conversation.status_code == 201
+    conversation_id = conversation.json()["id"]
+
+    outsider_view = client.get(f"/conversations/{conversation_id}", headers=outsider_headers)
+    assert outsider_view.status_code == 403
+
+    outsider_message = client.post(
+        f"/conversations/{conversation_id}/messages",
+        headers=outsider_headers,
+        json={"body": "Can I jump into this thread?"},
+    )
+    assert outsider_message.status_code == 403
+
+    # Participants can still use the conversation after the outsider is refused.
+    allowed = client.post(
+        f"/conversations/{conversation_id}/messages",
+        headers=buyer_headers,
+        json={"body": "Is this still available?"},
+    )
+    assert allowed.status_code == 201
+
+
 def test_rest_message_broadcasts_to_participant_websocket(client: TestClient) -> None:
     seller = register_user(client, "seller@example.com", "seller")
     buyer = register_user(client, "buyer@example.com", "buyer")
