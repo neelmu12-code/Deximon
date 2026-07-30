@@ -94,6 +94,47 @@ def test_mark_all_notifications_read(client: TestClient) -> None:
     assert all(item["is_read"] for item in read_all.json()["notifications"])
 
 
+def test_mark_single_notification_read(client: TestClient) -> None:
+    seller = register_user(client, "seller@example.com", "seller")
+    buyer = register_user(client, "buyer@example.com", "buyer")
+    seller_headers = auth_headers(seller)
+    buyer_headers = auth_headers(buyer)
+    card = create_card(client, seller_headers, "Pikachu")
+    listing = create_listing(client, seller_headers, str(card["id"]))
+    conversation = client.post(
+        "/conversations",
+        headers=buyer_headers,
+        json={"listing_id": listing["id"]},
+    )
+    assert conversation.status_code == 201
+    client.post(
+        f"/conversations/{conversation.json()['id']}/messages",
+        headers=buyer_headers,
+        json={"body": "Still available?"},
+    )
+
+    listed = client.get("/notifications", headers=seller_headers)
+    assert listed.status_code == 200
+    payload = listed.json()
+    assert payload["unread_count"] == 1
+    notification_id = payload["notifications"][0]["id"]
+    assert payload["notifications"][0]["is_read"] is False
+
+    marked = client.patch(f"/notifications/{notification_id}/read", headers=seller_headers)
+    assert marked.status_code == 200
+    assert marked.json()["id"] == notification_id
+    assert marked.json()["is_read"] is True
+
+    refreshed = client.get("/notifications", headers=seller_headers)
+    assert refreshed.status_code == 200
+    assert refreshed.json()["unread_count"] == 0
+    assert refreshed.json()["notifications"][0]["is_read"] is True
+
+    # Another user cannot mark someone else's notification as read.
+    foreign = client.patch(f"/notifications/{notification_id}/read", headers=buyer_headers)
+    assert foreign.status_code == 404
+
+
 def test_seller_reviews_create_list_and_profile_rating(client: TestClient) -> None:
     seller = register_user(client, "seller@example.com", "seller")
     buyer = register_user(client, "buyer@example.com", "buyer")
