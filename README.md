@@ -57,6 +57,23 @@ Useful local scripts:
 ./scripts/dev-reset.ps1 -Force # delete Docker volumes, rebuild, migrate, seed
 ```
 
+## Run all tests
+
+From the repository root on Windows, run every API, scanner, and frontend test
+suite with one command:
+
+```powershell
+.\test-all.cmd
+```
+
+The runner uses temporary Docker containers, continues after a failed suite,
+prints a final PASS/FAIL summary, and exits with a nonzero status when any suite
+fails. After the images have been built once, skip the build step when desired:
+
+```powershell
+.\test-all.cmd -SkipBuild
+```
+
 ## Status
 
 This project is under active development for EECS4314 (Summer 2026).

@@ -30,6 +30,7 @@ build/
 # --- Tooling ---
 .claude/
 CLAUDE.md
+AGENTS.md
 .DS_Store
 *.log
 *.local
