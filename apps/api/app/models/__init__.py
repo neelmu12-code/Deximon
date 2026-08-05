@@ -1,6 +1,7 @@
 """SQLAlchemy ORM models. Importing this module registers every model on `Base.metadata`,
 which is what Alembic's autogenerate scans."""
 
+from app.models.application_counter import ApplicationCounter
 from app.models.binder import BinderPage, BinderSlot
 from app.models.card import Card
 from app.models.chat import Conversation, Message
@@ -11,6 +12,7 @@ from app.models.tcg_card import TcgCard
 from app.models.user import PasswordResetToken, Profile, User
 
 __all__ = [
+    "ApplicationCounter",
     "User",
     "Profile",
     "PasswordResetToken",

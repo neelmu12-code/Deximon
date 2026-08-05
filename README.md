@@ -48,6 +48,20 @@ depend on the pokemontcg.io API. It's idempotent — skips if the catalog is
 already loaded. To refresh the fixture from upstream, see
 `app/scripts/build_tcg_fixture.py`.
 
+## Cost guardrails
+
+The main API enforces two durable, deployment-wide limits through PostgreSQL:
+
+- `MAX_USER_ACCOUNTS=100` caps lifetime account creation across password and
+  Google OAuth signup. Existing users can still sign in after the cap is reached.
+- `DAILY_AWS_SCAN_LIMIT=10` caps authenticated `POST /scan` attempts across all
+  users per UTC day. A reserved attempt is counted even if the downstream AWS
+  request fails because AWS may already have processed it. `POST /scan/mock`
+  remains free, unauthenticated, and does not consume this quota.
+
+Run `alembic upgrade head` after deploying changes so the shared counter rows
+exist before serving traffic.
+
 Useful local scripts:
 
 ```powershell

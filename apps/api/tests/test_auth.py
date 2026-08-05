@@ -1,6 +1,7 @@
 from datetime import UTC, datetime, timedelta
 from types import SimpleNamespace
 
+import pytest
 from fastapi.responses import RedirectResponse
 from fastapi.testclient import TestClient
 from sqlalchemy import select
@@ -9,10 +10,12 @@ from sqlalchemy.orm import Session, sessionmaker
 from app.core.config import Settings, get_settings
 from app.core.security import hash_reset_token
 from app.main import app
+from app.models.application_counter import ApplicationCounter
 from app.models.card import Card
 from app.models.user import PasswordResetToken, User
 from app.routes import auth as auth_routes
 from app.routes.auth import _google_user
+from app.services.limits import ACCOUNT_COUNTER_KEY, AccountCapacityError
 
 FORGOT_PASSWORD_MESSAGE = "If an account exists for that email, a reset link has been sent."
 RESET_PASSWORD_MESSAGE = "Password has been reset successfully."
@@ -43,6 +46,7 @@ def oauth_test_settings(**overrides: object) -> SimpleNamespace:
         "access_token_expire_minutes": 60,
         "jwt_secret_key": "test-only-jwt-secret-key-that-is-long-enough",
         "jwt_algorithm": "HS256",
+        "max_user_accounts": 100,
     }
     values.update(overrides)
     return SimpleNamespace(**values)
@@ -78,6 +82,49 @@ def test_duplicate_email_is_rejected_case_insensitively(client: TestClient) -> N
     response = client.post("/auth/register", json=duplicate)
     assert response.status_code == 409
     assert response.json()["detail"] == "Email is already registered"
+
+
+def test_registration_rejects_accounts_beyond_global_capacity(
+    client: TestClient,
+    session_factory: sessionmaker[Session],
+) -> None:
+    settings = get_settings().model_copy(update={"max_user_accounts": 1})
+    app.dependency_overrides[get_settings] = lambda: settings
+
+    register(client)
+    response = client.post(
+        "/auth/register",
+        json={
+            "email": "brock@example.com",
+            "username": "brock",
+            "display_name": "Brock",
+            "password": "Onix123!",
+        },
+    )
+
+    assert response.status_code == 503
+    assert response.json()["detail"] == "Account registration capacity has been reached."
+    with session_factory() as db:
+        counter = db.get(ApplicationCounter, ACCOUNT_COUNTER_KEY)
+        assert counter is not None
+        assert counter.value == 1
+        assert db.scalar(select(User).where(User.email == "brock@example.com")) is None
+
+
+def test_existing_user_can_login_after_registration_capacity_is_reached(
+    client: TestClient,
+) -> None:
+    settings = get_settings().model_copy(update={"max_user_accounts": 1})
+    app.dependency_overrides[get_settings] = lambda: settings
+    register(client)
+    client.cookies.clear()
+
+    response = client.post(
+        "/auth/login",
+        json={"email": "misty@example.com", "password": "Starmie123!"},
+    )
+
+    assert response.status_code == 200
 
 
 def test_login_success_returns_access_token(client: TestClient) -> None:
@@ -398,7 +445,29 @@ def test_google_user_helper_links_existing_verified_email(
                 "sub": "google-subject-1",
                 "name": "Misty",
             },
+            max_user_accounts=100,
         )
         db.commit()
         assert user.email == "misty@example.com"
         assert user.google_subject == "google-subject-1"
+
+
+def test_google_oauth_new_user_obeys_account_capacity(
+    client: TestClient,
+    session_factory: sessionmaker[Session],
+) -> None:
+    settings = get_settings().model_copy(update={"max_user_accounts": 1})
+    app.dependency_overrides[get_settings] = lambda: settings
+    register(client)
+
+    with session_factory() as db, pytest.raises(AccountCapacityError):
+        _google_user(
+            db,
+            {
+                "email": "brock@example.com",
+                "email_verified": True,
+                "sub": "google-subject-brock",
+                "name": "Brock",
+            },
+            max_user_accounts=1,
+        )

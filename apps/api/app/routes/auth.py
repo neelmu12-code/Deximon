@@ -36,6 +36,7 @@ from app.schemas.auth import (
 )
 from app.schemas.user import MeResponse
 from app.services.email import send_password_reset_email
+from app.services.limits import AccountCapacityError, reserve_user_account
 
 router = APIRouter(prefix="/auth", tags=["auth"])
 api_router = APIRouter(prefix="/api/auth", tags=["auth"])
@@ -46,6 +47,7 @@ CurrentUser = Annotated[User, Depends(get_current_user)]
 
 FORGOT_PASSWORD_MESSAGE = "If an account exists for that email, a reset link has been sent."
 RESET_PASSWORD_MESSAGE = "Password has been reset successfully."
+ACCOUNT_CAPACITY_MESSAGE = "Account registration capacity has been reached."
 
 
 def _me_response(user: User) -> MeResponse:
@@ -143,7 +145,17 @@ def register(
         detail = "Email is already registered" if duplicate.email.lower() == email else "Username is taken"
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=detail)
 
-    user = User(email=email, username=payload.username, password_hash=hash_password(payload.password))
+    password_hash = hash_password(payload.password)
+    try:
+        reserve_user_account(db, settings.max_user_accounts)
+    except AccountCapacityError:
+        db.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail=ACCOUNT_CAPACITY_MESSAGE,
+        ) from None
+
+    user = User(email=email, username=payload.username, password_hash=password_hash)
     user.profile = Profile(display_name=payload.display_name or payload.username, binder_public=True)
     db.add(user)
     try:
@@ -344,7 +356,11 @@ def _available_google_username(db: Session, email: str) -> str:
     return candidate
 
 
-def _google_user(db: Session, userinfo: dict[str, object]) -> User:
+def _google_user(
+    db: Session,
+    userinfo: dict[str, object],
+    max_user_accounts: int,
+) -> User:
     email = str(userinfo["email"]).lower()
     subject = str(userinfo["sub"])
     subject_user = db.scalar(select(User).where(User.google_subject == subject))
@@ -354,6 +370,7 @@ def _google_user(db: Session, userinfo: dict[str, object]) -> User:
 
     user = subject_user or email_user
     if user is None:
+        reserve_user_account(db, max_user_accounts)
         display_name = str(userinfo.get("name") or email.split("@", 1)[0])[:80]
         user = User(email=email, username=_available_google_username(db, email), google_subject=subject)
         user.profile = Profile(display_name=display_name, binder_public=True)
@@ -388,10 +405,10 @@ async def google_callback(
         verified = userinfo.get("email_verified") in (True, "true")
         if not verified or not userinfo.get("email") or not userinfo.get("sub"):
             return _oauth_error_redirect(settings)
-        user = _google_user(db, userinfo)
+        user = _google_user(db, userinfo, settings.max_user_accounts)
         db.commit()
         db.refresh(user)
-    except (IntegrityError, KeyError, OAuthError, ValueError):
+    except (AccountCapacityError, IntegrityError, KeyError, OAuthError, ValueError):
         db.rollback()
         return _oauth_error_redirect(settings)
 

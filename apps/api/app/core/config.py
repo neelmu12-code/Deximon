@@ -14,6 +14,8 @@ class Settings(BaseSettings):
     redis_url: str = Field(default="redis://localhost:6379/0", alias="REDIS_URL")
     scanner_url: str = Field(default="http://scanner:8001", alias="SCANNER_URL")
     scanner_timeout_seconds: float = Field(default=90, gt=0, alias="SCANNER_TIMEOUT_SECONDS")
+    daily_aws_scan_limit: int = Field(default=10, gt=0, alias="DAILY_AWS_SCAN_LIMIT")
+    max_user_accounts: int = Field(default=100, gt=0, alias="MAX_USER_ACCOUNTS")
 
     jwt_secret_key: str = Field(
         validation_alias=AliasChoices("JWT_SECRET_KEY", "JWT_SECRET"),

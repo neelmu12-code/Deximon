@@ -17,6 +17,7 @@ from app.db.base import Base  # noqa: E402
 from app.db.session import get_db  # noqa: E402
 from app.main import app  # noqa: E402
 from app.models import (  # noqa: E402,F401
+    ApplicationCounter,
     BinderPage,
     BinderSlot,
     Card,
