@@ -16,6 +16,16 @@ class Settings(BaseSettings):
     scanner_timeout_seconds: float = Field(default=90, gt=0, alias="SCANNER_TIMEOUT_SECONDS")
     daily_aws_scan_limit: int = Field(default=10, gt=0, alias="DAILY_AWS_SCAN_LIMIT")
     max_user_accounts: int = Field(default=100, gt=0, alias="MAX_USER_ACCOUNTS")
+    register_rate_limit_requests: int = Field(
+        default=10,
+        gt=0,
+        alias="REGISTER_RATE_LIMIT_REQUESTS",
+    )
+    register_rate_limit_window_seconds: int = Field(
+        default=3600,
+        gt=0,
+        alias="REGISTER_RATE_LIMIT_WINDOW_SECONDS",
+    )
 
     jwt_secret_key: str = Field(
         validation_alias=AliasChoices("JWT_SECRET_KEY", "JWT_SECRET"),

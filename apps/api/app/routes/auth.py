@@ -37,6 +37,7 @@ from app.schemas.auth import (
 from app.schemas.user import MeResponse
 from app.services.email import send_password_reset_email
 from app.services.limits import AccountCapacityError, reserve_user_account
+from app.services.rate_limit import RateLimiter, get_rate_limiter
 
 router = APIRouter(prefix="/auth", tags=["auth"])
 api_router = APIRouter(prefix="/api/auth", tags=["auth"])
@@ -44,6 +45,7 @@ logger = logging.getLogger(__name__)
 DbSession = Annotated[Session, Depends(get_db)]
 SettingsDep = Annotated[Settings, Depends(get_settings)]
 CurrentUser = Annotated[User, Depends(get_current_user)]
+RateLimiterDep = Annotated[RateLimiter, Depends(get_rate_limiter)]
 
 FORGOT_PASSWORD_MESSAGE = "If an account exists for that email, a reset link has been sent."
 RESET_PASSWORD_MESSAGE = "Password has been reset successfully."
@@ -131,10 +133,31 @@ def _revoke_active_password_reset_tokens(
 @router.post("/register", response_model=TokenResponse, status_code=status.HTTP_201_CREATED)
 def register(
     payload: RegisterRequest,
+    request: Request,
     response: Response,
     db: DbSession,
     settings: SettingsDep,
+    rate_limiter: RateLimiterDep,
 ) -> TokenResponse:
+    rate_limit = rate_limiter.hit(
+        "registration",
+        _request_ip(request) or "unknown",
+        limit=settings.register_rate_limit_requests,
+        window_seconds=settings.register_rate_limit_window_seconds,
+    )
+    rate_headers = {
+        "X-RateLimit-Limit": str(rate_limit.limit),
+        "X-RateLimit-Remaining": str(rate_limit.remaining),
+    }
+    if not rate_limit.allowed:
+        rate_headers["Retry-After"] = str(rate_limit.retry_after)
+        raise HTTPException(
+            status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+            detail="Too many registration attempts. Please try again later.",
+            headers=rate_headers,
+        )
+    response.headers.update(rate_headers)
+
     email = str(payload.email).lower()
     duplicate = db.scalar(
         select(User).where(

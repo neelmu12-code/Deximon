@@ -31,6 +31,24 @@ from app.models import (  # noqa: E402,F401
     TcgCard,
     User,
 )
+from app.services.rate_limit import RateLimitResult, get_rate_limiter  # noqa: E402
+
+
+class AllowAllRateLimiter:
+    def hit(
+        self,
+        namespace: str,
+        identifier: str,
+        *,
+        limit: int,
+        window_seconds: int,
+    ) -> RateLimitResult:
+        return RateLimitResult(
+            allowed=True,
+            limit=limit,
+            remaining=limit - 1,
+            retry_after=window_seconds,
+        )
 
 
 @pytest.fixture
@@ -57,6 +75,7 @@ def client(session_factory: sessionmaker[Session]) -> Iterator[TestClient]:
             db.close()
 
     app.dependency_overrides[get_db] = override_get_db
+    app.dependency_overrides[get_rate_limiter] = lambda: AllowAllRateLimiter()
     with TestClient(app) as test_client:
         yield test_client
     app.dependency_overrides.clear()

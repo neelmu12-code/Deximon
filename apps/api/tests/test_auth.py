@@ -16,6 +16,7 @@ from app.models.user import PasswordResetToken, User
 from app.routes import auth as auth_routes
 from app.routes.auth import _google_user
 from app.services.limits import ACCOUNT_COUNTER_KEY, AccountCapacityError
+from app.services.rate_limit import RateLimitResult, get_rate_limiter
 
 FORGOT_PASSWORD_MESSAGE = "If an account exists for that email, a reset link has been sent."
 RESET_PASSWORD_MESSAGE = "Password has been reset successfully."
@@ -74,6 +75,40 @@ def test_register_success_hashes_password_and_returns_token(
         assert user is not None
         assert user.password_hash != registration_payload()["password"]
         assert user.profile.binder_public is True
+
+
+def test_registration_rate_limit_rejects_before_creating_user(
+    client: TestClient,
+    session_factory: sessionmaker[Session],
+) -> None:
+    class DenyRegistrationRateLimiter:
+        def hit(
+            self,
+            namespace: str,
+            identifier: str,
+            *,
+            limit: int,
+            window_seconds: int,
+        ) -> RateLimitResult:
+            assert namespace == "registration"
+            assert identifier == "testclient"
+            return RateLimitResult(
+                allowed=False,
+                limit=limit,
+                remaining=0,
+                retry_after=321,
+            )
+
+    app.dependency_overrides[get_rate_limiter] = lambda: DenyRegistrationRateLimiter()
+    response = client.post("/auth/register", json=registration_payload())
+
+    assert response.status_code == 429
+    assert response.headers["retry-after"] == "321"
+    assert response.headers["x-ratelimit-limit"] == "10"
+    assert response.headers["x-ratelimit-remaining"] == "0"
+    with session_factory() as db:
+        assert db.scalar(select(User).where(User.email == "misty@example.com")) is None
+        assert db.get(ApplicationCounter, ACCOUNT_COUNTER_KEY) is None
 
 
 def test_duplicate_email_is_rejected_case_insensitively(client: TestClient) -> None:
